@@ -15,7 +15,7 @@ The whole app is one file, `ibutton-console.html`. There is nothing to install o
 
 Open **https://mariofrei.github.io/ibutton-console/** in Chrome. The online version can also connect to the USB reader.
 
-### Download and open
+### Use it offline
 
 To use the app offline or keep your own copy:
 
