@@ -1,0 +1,2145 @@
+<meta charset="utf-8">
+<title>iButton Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen instrument console. Header strip with demo toggle, left rail (reader, device, mission setup), right stage (chart, stats, data), activity log below. */
+:root {
+  --bg: #eef1f3;
+  --panel: #ffffff;
+  --panel-2: #f5f7f8;
+  --line: #d6dce0;
+  --fg: #14212a;
+  --muted: #5d6c76;
+  --accent: #0a6c7c; --hum: #7c3aed;
+  --accent-fg: #ffffff;
+  --accent-soft: #d9eef1;
+  --hot: #c2410c;
+  --cold: #2563eb;
+  --ok: #15803d;
+  --warn: #a16207;
+  --grid: #e3e8eb;
+  --alert: #b91c1c;
+  --alert-soft: #fde8e8;
+  --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1418; --panel: #141d23; --panel-2: #192329; --line: #26343c;
+    --fg: #e3eaee; --muted: #8fa1ac; --accent: #3fb6c7; --hum: #a78bfa; --accent-fg: #06181c;
+    --accent-soft: #143038; --hot: #fb923c; --cold: #60a5fa; --ok: #4ade80; --warn: #facc15;
+    --grid: #1f2b32; --alert: #f87171; --alert-soft: #3a1919; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1418; --panel: #141d23; --panel-2: #192329; --line: #26343c;
+  --fg: #e3eaee; --muted: #8fa1ac; --accent: #3fb6c7; --hum: #a78bfa; --accent-fg: #06181c;
+  --accent-soft: #143038; --hot: #fb923c; --cold: #60a5fa; --ok: #4ade80; --warn: #facc15;
+  --grid: #1f2b32; --alert: #f87171; --alert-soft: #3a1919; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body { background: var(--bg); background-image: var(--bg-image, none); background-size: var(--bg-size, auto); background-attachment: fixed; color: var(--fg); font-family: var(--font-ui); font-size: var(--fs, 14px); line-height: 1.45; padding-inline: 16px; padding-block: 0 24px; }
+.mono, .num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+h1, h2 { margin: 0; font-weight: 600; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.topbar { color: var(--topbar-fg, inherit); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding-block: 14px; max-width: 1400px; margin-inline: auto; }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
+.brand-mark { width: 26px; height: 26px; border-radius: var(--r-mark, 50%); background: var(--accent); position: relative; flex: none; }
+.brand-mark::after { content: ""; position: absolute; inset: 7px; border-radius: var(--r-mark, 50%); background: var(--bg); }
+.brand h1 { font-family: var(--brand-font, inherit); font-size: 17px; letter-spacing: 0.01em; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border: var(--chip-border, 1px solid var(--line)); border-radius: var(--r-pill, 99px); background: var(--panel); box-shadow: var(--chip-shadow, none); color: var(--fg); font-size: 12.5px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--hot); }
+
+.switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; font-weight: 500; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.track { width: 38px; height: 22px; border-radius: var(--r-track, 99px); background: var(--track-off, var(--line)); position: relative; transition: background .15s; flex: none; }
+.track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: var(--r-knob, 50%); background: var(--knob, var(--panel)); box-shadow: var(--knob-shadow, 0 1px 2px rgba(0,0,0,.3)); transition: transform .15s; }
+.switch input:checked + .track { background: var(--switch-on, var(--accent)); }
+.switch input:checked + .track::after { transform: translateX(16px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.banner { max-width: 1400px; margin: 0 auto 16px; padding: 10px 14px; border: var(--banner-border, 1px solid var(--alert)); background: var(--alert-soft); color: var(--banner-fg, inherit); border-radius: var(--r-panel, 8px); box-shadow: var(--banner-shadow, none); }
+.browserHint { max-width: 1400px; margin: -4px auto 12px; font-size: 12.5px; color: var(--muted); }
+.browserHint.warn { color: var(--alert); font-weight: 600; }
+.banner strong { color: var(--alert); }
+.bannerGrid { max-width: 1100px; display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); gap: 10px 14px; margin-top: 10px; align-items: center; }
+.bannerGrid label { font-weight: 600; }
+.bannerGrid select { width: 100%; min-width: 0; padding: 5px 8px; border: 1px solid var(--alert); border-radius: 6px; background: var(--panel); }
+.bannerGrid .note { font-size: 13px; opacity: .9; min-width: 0; text-wrap: balance; }
+#dModel a { color: var(--accent); text-decoration: underline; }
+.bannerGrid .note a { font-weight: 600; color: var(--alert); text-decoration: underline; }
+@media (max-width: 760px) { .bannerGrid { grid-template-columns: 1fr; gap: 4px; } .bannerGrid .note { margin-bottom: 10px; } }
+.overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal { background: var(--panel); border: var(--panel-border, 1px solid var(--line)); box-shadow: var(--panel-shadow, none); border-radius: var(--r-panel, 10px); padding: 16px 18px 18px; width: 100%; max-width: 580px; max-height: 100%; overflow: auto; }
+.modal > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.modal h2 { font-size: 16px; }
+.about p { margin: 0 0 10px; }
+.about h3 { font-size: 13px; margin: 14px 0 6px; }
+.about a { color: var(--accent); text-decoration: underline; }
+.about .license { font-size: 12px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 0; max-height: 220px; overflow: auto; }
+.field textarea { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); resize: vertical; }
+#fbPreview { font-size: 12px; }
+.dropzone { position: fixed; inset: 8px; z-index: 60; border: 3px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); opacity: .92; display: flex; align-items: center; justify-content: center; pointer-events: none; font-size: 20px; font-weight: 600; color: var(--accent); }
+.btn.sm { padding: 3px 9px; font-size: 12.5px; }
+.hbtns { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.hlist { max-height: 300px; overflow: auto; }
+.hgroup + .hgroup { margin-top: 12px; }
+.hhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; padding-bottom: 4px; }
+.hhead .hcount { color: var(--muted); font-size: 12px; margin-left: auto; }
+.hrow { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; padding: 5px 0; border-top: 1px solid var(--line); }
+.hwhen { font-size: 12.5px; }
+.hmeta { color: var(--muted); font-size: 12px; margin-right: auto; }
+.hrow .pill { font-size: 11px; padding: 0 7px; }
+.layout { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 16px; max-width: 1400px; margin-inline: auto; align-items: start; }
+.rail, .stage { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel { background: var(--panel); border: var(--panel-border, 1px solid var(--line)); border-radius: var(--r-panel, 8px); box-shadow: var(--panel-shadow, none); -webkit-backdrop-filter: var(--panel-blur, none); backdrop-filter: var(--panel-blur, none); padding: 14px 16px 16px; min-width: 0; }
+.panel > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.fold { display: inline-flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; text-align: left; }
+.fold::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin: -3px 4px 0 2px; transition: transform .15s; flex: none; }
+.panel.collapsed .fold::before { transform: rotate(-45deg); margin: 0 4px 0 0; }
+.fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.panel.collapsed > :not(header) { display: none !important; }
+.panel.collapsed > header { margin-bottom: 0; }
+.panel h2 { font-family: var(--h2-font, inherit); font-size: var(--h2-size, 11.5px); text-transform: var(--h2-case, uppercase); letter-spacing: var(--h2-ls, 0.09em); color: var(--h2-color, var(--muted)); font-weight: var(--h2-weight, 600); text-shadow: var(--h2-shadow, none); }
+
+.btn { border: var(--btn-border, 1px solid var(--line)); background: var(--btn-bg, var(--panel-2)); color: var(--btn-fg, inherit); border-radius: var(--r-btn, 6px); box-shadow: var(--btn-shadow, none); padding: 7px 12px; cursor: pointer; font-weight: var(--btn-weight, 500); -webkit-backdrop-filter: var(--panel-blur, none); backdrop-filter: var(--panel-blur, none); }
+.btn:hover:not(:disabled) { border-color: var(--btn-hover-bd, var(--accent)); background: var(--btn-hover-bg, var(--btn-bg, var(--panel-2))); }
+.btn:active:not(:disabled) { box-shadow: var(--btn-active-shadow, var(--btn-shadow, none)); background: var(--btn-active-bg, var(--btn-hover-bg, var(--btn-bg, var(--panel-2)))); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--primary-bg, var(--accent)); color: var(--primary-fg, var(--accent-fg)); border: var(--primary-border, 1px solid var(--accent)); box-shadow: var(--primary-shadow, none); }
+.btn.primary:hover:not(:disabled) { background: var(--primary-hover-bg, var(--primary-bg, var(--accent))); border-color: var(--primary-hover-bd, var(--btn-hover-bd, var(--accent))); }
+.btn.danger:hover:not(:disabled) { border-color: var(--hot); color: var(--hot); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn-row .btn { flex: 1 1 auto; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 32px; }
+.cols h3 { margin: 0 0 8px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
+@media (max-width: 700px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.rom { font-size: 15px; letter-spacing: 0.04em; padding: 8px 10px; background: var(--panel-2); border: var(--card-border, 1px solid var(--line)); box-shadow: var(--card-shadow, none); border-radius: var(--r-card, 6px); margin-bottom: 12px; text-align: center; overflow-wrap: anywhere; }
+
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field label { color: var(--muted); font-size: 12.5px; }
+.field input[type="number"], .field input[type="text"], .field select { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+.inline { display: flex; gap: 6px; }
+.inline > * { min-width: 0; }
+.inline > .btn { flex: none; }
+.check { display: flex; align-items: center; gap: 8px; }
+.check label { color: var(--fg); font-size: 13.5px; }
+.est { margin-top: 14px; padding: 10px 12px; background: var(--panel-2); border: var(--card-border, 1px solid var(--line)); box-shadow: var(--card-shadow, none); border-radius: var(--r-card, 6px); }
+.est .k { color: var(--muted); font-size: 12.5px; }
+.est .v { font-size: 19px; margin-top: 2px; overflow-wrap: anywhere; }
+.est .s { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+.field.check { flex-direction: row; align-items: center; }
+/* Mission setup: one setting per row, label left, control right */
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.rows .field { display: grid; grid-template-columns: 8.4em minmax(0, 1fr); align-items: center; gap: 10px; }
+.rows #cfgRate { flex: 0 0 4.6em; }
+.rows .field label, .rows .field.check label { color: var(--muted); font-size: inherit; }
+.rows .field.check input { justify-self: start; }
+.alarmCtl { align-items: center; }
+/* Reader: hardware buttons stacked on the left, file on the right */
+.readerGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: start; }
+.readerCol { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.alarmCtl input[type="checkbox"] { flex: none; margin: 0; }
+.rows input[type="checkbox"] { width: 20px; height: 20px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+.field input:disabled { opacity: .45; cursor: not-allowed; }
+.field.check input { flex: none; margin: 0; }
+
+.pill { padding: 2px 9px; border-radius: var(--r-pill, 99px); font-size: 12px; font-weight: 600; border: 1px solid var(--line); }
+.pill.run { color: var(--ok); border-color: var(--ok); }
+.pill.done { color: var(--accent); border-color: var(--accent); }
+.pill.idle { color: var(--muted); }
+.pill.err { color: var(--hot); border-color: var(--hot); }
+
+.sumwrap { display: flex; flex-direction: column; gap: 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.stat { background: var(--panel-2); border: var(--card-border, 1px solid var(--line)); box-shadow: var(--card-shadow, none); border-radius: var(--r-card, 6px); padding: 8px 10px; min-width: 0; }
+.stat .k { color: var(--muted); font-size: 12px; }
+.stat .v { font-size: 19px; margin-top: 2px; }
+.stat .s { color: var(--muted); font-size: 11.5px; }
+.stat.hot .v { color: var(--hot); } .stat.cold .v { color: var(--cold); }
+
+.chartwrap { position: relative; }
+svg.chart { width: 100%; height: auto; display: block; touch-action: none; background: var(--chart-bg, transparent); border: var(--chart-border, 0); }
+svg text { font-family: var(--font-data); font-size: 11px; fill: var(--muted); }
+.readout { position: absolute; top: 6px; right: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card, 6px); padding: 4px 8px; font-size: 12px; pointer-events: none; }
+.empty { padding: 36px 12px; text-align: center; color: var(--muted); }
+
+.tablewrap { max-height: 127px; overflow: auto; border: var(--card-border, 1px solid var(--line)); box-shadow: var(--card-shadow, none); background: var(--table-bg, transparent); border-radius: var(--r-card, 6px); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.wide { width: max-content; min-width: 100%; }
+table.wide th, table.wide td { white-space: nowrap; padding-right: 14px; }
+th, td { padding: 5px 10px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th.colh { cursor: grab; user-select: none; }
+thead th.dragging { opacity: .45; }
+thead th.dropL { box-shadow: inset 3px 0 0 var(--accent); }
+thead th.dropR { box-shadow: inset -3px 0 0 var(--accent); }
+thead th { position: sticky; top: 0; background: var(--panel-2); color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); }
+tbody tr:nth-child(even) { background: var(--panel-2); }
+tr.hi td { color: var(--hot); } tr.lo td { color: var(--cold); }
+.note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.export { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 10px; align-items: end; margin-top: 12px; }
+.export .fnnote { margin: 0; overflow-wrap: anywhere; align-self: start; }
+.dragfile { align-self: start; width: 0; min-width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px dashed var(--line); border-radius: var(--r-card, 6px); background: var(--panel-2); cursor: grab; user-select: none; overflow: hidden; }
+.dragfile:hover { border-color: var(--ok); }
+.dragfile svg { flex: none; }
+.dragfile.off { opacity: .45; cursor: not-allowed; }
+.dragname { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.export .field input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+.hit { cursor: ns-resize; }
+.hit:focus-visible { outline: none; }
+.hit:focus-visible + .thr, .hit:hover + .thr { stroke-width: 2.6; }
+.thr { pointer-events: none; }
+#chart text, #hist text, #hist2 text { font-size: var(--svgfs, 14px); }
+.seg { display: inline-flex; border: var(--btn-border, 1px solid var(--line)); border-radius: var(--r-btn, 6px); overflow: hidden; }
+.seg button { border: 0; background: var(--btn-bg, var(--panel-2)); color: var(--btn-fg, inherit); padding: 3px 10px; font-size: 12.5px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--seg-on, var(--accent)); color: var(--seg-on-fg, var(--accent-fg)); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.panel.collapsed .seg { display: none; }
+.statgroup { grid-column: 1 / -1; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-top: 4px; }
+#chart text.axt, #hist text.axt, #hist2 text.axt { fill: var(--fg); font-family: var(--font-ui); font-weight: 500; }
+#cross, #crossDot { pointer-events: none; }
+
+.log { max-height: 170px; overflow: auto; font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; }
+.log div { display: flex; gap: 12px; }
+.log .t { color: var(--muted); flex: none; }
+.log .e { color: var(--hot); } .log .w { color: var(--warn); } .log .o { color: var(--ok); }
+.demo-tag { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .export { grid-template-columns: minmax(0, 1fr); } .dragfile { width: auto; min-width: 0; } }
+@media (max-width: 420px) { .form { grid-template-columns: 1fr; } }
+.field input[type="number"], .field input[type="text"], .field select, .export .field input, .field textarea { border: var(--input-border, 1px solid var(--line)); border-radius: var(--r-input, 6px); background: var(--input-bg, var(--panel-2)); box-shadow: var(--input-shadow, none); color: var(--input-fg, var(--fg)); }
+.bannerGrid select { border: var(--banner-input-border, 1px solid var(--alert)); border-radius: var(--r-input, 6px); background: var(--input-bg, var(--panel)); box-shadow: var(--input-shadow, none); color: var(--input-fg, var(--fg)); }
+</style>
+
+<div class="topbar">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span><h1>iButton Console</h1></div>
+  <span class="chip" id="connChip"><span class="dot" id="connDot"></span><span id="connText">Not connected</span></span>
+  <button class="btn sm" id="btnFeedback" type="button">Feedback / bug report</button>
+  <button class="btn sm" id="btnAbout" type="button">About</button>
+  <label class="switch modeSw" for="modeToggle" title="Follows the system setting until you change it"><input type="checkbox" id="modeToggle"><span class="track"></span><span>Dark mode</span></label>
+  <label class="switch" for="demoToggle"><input type="checkbox" id="demoToggle"><span class="track"></span><span>Demo mode</span></label>
+</div>
+<div class="browserHint" id="browserHint">Reading a real iButton reader needs a browser with WebUSB, such as Chrome or Edge. Demo mode works in any browser.</div>
+
+<div class="overlay" id="fbOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+    <header><h2 id="fbTitle">Feedback and bug report</h2><button class="btn" id="fbClose" type="button" aria-label="Close">Close</button></header>
+    <div class="form">
+      <div class="field"><label for="fbType">Type</label><select id="fbType"><option>Bug report</option><option>Feedback</option><option>Feature request</option></select></div>
+      <div class="field"><label for="fbTo">Send to (email)</label><input type="text" id="fbTo" placeholder="name@example.com" autocomplete="email"></div>
+      <div class="field wide"><label for="fbText">Message</label><textarea id="fbText" rows="5" placeholder="What happened? What did you expect? Steps to reproduce help."></textarea></div>
+      <div class="field wide check"><input type="checkbox" id="fbDiag" checked><label for="fbDiag">Include diagnostics (mode, device ID, settings, browser, recent activity)</label></div>
+      <div class="field wide"><label for="fbPreview">Report preview</label><textarea id="fbPreview" class="mono" rows="6" readonly></textarea></div>
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn primary" id="fbCopy" type="button">Copy report</button>
+      <a class="btn" id="fbMail" href="#" target="_blank" rel="noopener" style="text-align:center;text-decoration:none;color:var(--fg)">Open email draft</a>
+    </div>
+    <p class="note" id="fbStatus" aria-live="polite">Nothing is sent automatically. Copy the report or open an email draft.</p>
+  </div>
+</div>
+
+<div class="overlay" id="aboutOverlay" hidden>
+  <div class="modal about" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <header><h2 id="aboutTitle">About iButton Console</h2><button class="btn" id="aboutClose" type="button" aria-label="Close">Close</button></header>
+    <p>A browser console for Maxim/Analog iButton temperature and humidity loggers (DS1921, DS1922, DS1923, DS1925). It reads and configures loggers through a DS9490R USB reader over WebUSB, and it can open CSV files and earlier reads. Everything runs in your browser; no data is sent anywhere.</p>
+    <h3>Author</h3>
+    <p>Mario Frei, <a href="mailto:mario.frei@gmx.net">mario.frei@gmx.net</a></p>
+    <h3>Use of AI</h3>
+    <p>Large language models (LLMs) were used to write and revise the code and text of this app, including Anthropic's Claude Opus 5.5 (model ID claude-opus-5-5), used through Claude Code.</p>
+    <h3>License</h3>
+    <p>Released under the MIT License.</p>
+    <pre class="license mono">MIT License
+
+Copyright (c) 2026 Mario Frei
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</pre>
+  </div>
+</div>
+
+<div class="dropzone" id="dropHint" hidden><span>Drop a CSV file to open it</span></div>
+
+<div class="banner" id="demoBanner" role="status">
+  <div class="bannerTop"><strong>Demo mode.</strong> <span>A simulated reader and logger are attached. No hardware needed.</span></div>
+  <div class="bannerGrid">
+    <label for="demoModel">Logger</label><select id="demoModel"></select><div class="note" id="demoNoteDev"></div>
+    <label for="demoScenario">Application</label><select id="demoScenario"></select><div class="note" id="demoNoteApp"></div>
+    <label for="demoDur">Mission duration</label><select id="demoDur"><option value="21600">6 hours</option><option value="86400">1 day</option><option value="172800">2 days</option><option value="604800" selected>7 days</option><option value="2592000">30 days</option><option value="0">Until memory is full</option></select><div class="note">How much history the simulated logger holds.</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="rail">
+    <section class="panel" aria-labelledby="h-reader">
+      <header><h2 id="h-reader">Reader</h2></header>
+      <div class="readerGrid">
+        <div class="readerCol">
+          <button class="btn primary" id="btnConnect">Connect reader</button>
+          <button class="btn" id="btnRead">Read device</button>
+          <button class="btn" id="btnDisconnect">Disconnect</button>
+        </div>
+        <div class="readerCol">
+          <button class="btn" id="btnOpenCsv">Open CSV file</button>
+          <input type="file" id="csvFile" accept=".csv,text/csv,text/plain" hidden>
+        </div>
+      </div>
+      <p class="note" id="readerNote"></p>
+    </section>
+
+
+    <section class="panel" aria-labelledby="h-mission">
+      <header><h2 id="h-mission">Mission setup</h2></header>
+      <div class="rows">
+        <div class="field">
+          <label for="cfgPreset">Saved settings</label>
+          <div class="inline">
+            <select id="cfgPreset"></select>
+            <button class="btn sm danger" id="btnPresetDel" type="button">Delete</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfgPresetName" title="Save the current settings under a name">Save as</label>
+          <div class="inline">
+            <input type="text" id="cfgPresetName" placeholder="Name, e.g. Fridge" maxlength="60" autocomplete="off">
+            <button class="btn sm" id="btnPresetSave" type="button">Save</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfgRate">Sample interval</label>
+          <div class="inline">
+            <input type="number" id="cfgRate" min="1" max="255" value="10">
+            <select id="cfgUnit" aria-label="Interval unit"><option value="1">seconds</option><option value="60" selected>minutes</option><option value="3600">hours</option></select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfgHigh">High alarm (°C)</label>
+          <div class="inline alarmCtl"><input type="checkbox" id="cfgHighOn" aria-label="High alarm on" title="Turn the high alarm on or off"><input type="number" id="cfgHigh" step="0.5" value="30"></div>
+        </div>
+        <div class="field">
+          <label for="cfgLow">Low alarm (°C)</label>
+          <div class="inline alarmCtl"><input type="checkbox" id="cfgLowOn" aria-label="Low alarm on" title="Turn the low alarm on or off"><input type="number" id="cfgLow" step="0.5" value="25"></div>
+        </div>
+        <div class="field">
+          <label for="cfgRes">Resolution</label>
+          <select id="cfgRes"><option value="0.5">0.5 °C (8 bit)</option><option value="0.0625">0.0625 °C (16 bit)</option></select>
+        </div>
+        <div class="field">
+          <label for="cfgDelay">Start delay (min)</label>
+          <input type="number" id="cfgDelay" min="0" value="0">
+        </div>
+        <div class="field check">
+          <label for="cfgSync" title="Set the logger's clock to this computer's time when the mission starts">Sync clock</label>
+          <input type="checkbox" id="cfgSync" checked>
+        </div>
+        <div class="field check">
+          <label for="cfgRoll" title="Overwrite the oldest samples when the memory is full">Overwrite oldest</label>
+          <input type="checkbox" id="cfgRoll">
+        </div>
+      </div>
+      <div class="est" aria-live="polite">
+        <div class="k">Max mission duration</div>
+        <div class="v mono" id="estDur">n/a</div>
+        <div class="s" id="estSub"></div>
+      </div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn primary" id="btnStart">Start mission</button>
+        <button class="btn" id="btnStop">Stop</button>
+        <button class="btn danger" id="btnClear">Clear memory</button>
+      </div>
+      <p class="note" id="clearNote" hidden>Press Clear memory again within 4 seconds to erase all stored samples.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-log">
+      <header><h2 id="h-log">Activity</h2></header>
+      <div class="log mono" id="log"></div>
+    </section>
+    <section class="panel" aria-labelledby="h-hist">
+      <header><h2 id="h-hist">History</h2><span class="hbtns"><button class="btn sm" id="btnHistExport" type="button" title="Download every saved read as CSV files in one ZIP">Export all</button><button class="btn sm" id="btnHistClear" type="button">Clear history</button></span></header>
+      <div class="hlist" id="histList"></div>
+      <p class="note" id="histNote"></p>
+    </section>
+  </div>
+
+  <div class="stage">
+    <section class="panel" aria-labelledby="h-source">
+      <header><h2 id="h-source">Data source</h2><span class="pill idle" id="srcPill">None</span></header>
+      <div class="cols" id="srcList"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-device">
+      <header><h2 id="h-device">Device</h2><span class="pill idle" id="missionPill">No device</span></header>
+      <div class="cols">
+        <div>
+          <h3>Logger</h3>
+          <dl class="kv">
+            <dt>Device ID</dt><dd class="mono" id="romId">n/a</dd>
+            <dt>Model</dt><dd id="dModel">n/a</dd>
+            <dt>Family code</dt><dd class="mono" id="dFamily">n/a</dd>
+            <dt>Memory total</dt><dd class="mono" id="dMem">n/a</dd>
+            <dt>Memory used</dt><dd class="mono" id="dUsed">n/a</dd>
+            <dt>Memory available</dt><dd class="mono" id="dFree">n/a</dd>
+            <dt>Device clock</dt><dd class="mono" id="dClock">n/a</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>Mission</h3>
+          <dl class="kv">
+            <dt>Mission start time</dt><dd class="mono" id="dStart">n/a</dd>
+            <dt>Last sample time</dt><dd class="mono" id="dLast">n/a</dd>
+            <dt>Mission duration</dt><dd class="mono" id="dDur">n/a</dd>
+            <dt>Sample interval</dt><dd class="mono" id="dRate">n/a</dd>
+            <dt>High alarm</dt><dd class="mono" id="dHigh">n/a</dd>
+            <dt>Low alarm</dt><dd class="mono" id="dLow">n/a</dd>
+            <dt>Resolution</dt><dd class="mono" id="dRes">n/a</dd>
+            <dt>Start delay</dt><dd class="mono" id="dDelay">n/a</dd>
+            <dt>Clock synced at start</dt><dd id="dSync">n/a</dd>
+            <dt>Overwrite when full</dt><dd id="dRoll">n/a</dd>
+            <dt>Max mission duration</dt><dd class="mono" id="dMax">n/a</dd>
+          </dl>
+        </div>
+      </div>
+          </section>
+    <section class="panel" aria-labelledby="h-data">
+      <header><h2 id="h-data">Samples</h2></header>
+      <div class="tablewrap"><table id="tbl">
+        <thead id="thead"><tr><th>#</th><th>Time</th><th>Temp (°C)</th><th id="thHum" hidden>Humidity (%RH)</th><th>Alarm</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <p class="note" id="tableNote"></p>
+      <div class="export">
+        <div class="field"><label for="fnName">File name</label><input type="text" id="fnName" list="dlName" placeholder="experiment_{id}_{datetime}" value="{id}_{datetime}" autocomplete="off"><datalist id="dlName"></datalist></div>
+        <div class="btn-row"><button class="btn primary" id="btnCsv">Save CSV</button><button class="btn" id="btnCopy">Copy CSV</button></div>
+        <p class="note fnnote">File name: <span class="mono" id="fnPreview"></span><br>Tokens: {id} {model} {date} {time} {datetime}<br>Custom format: {datetime:YYYYMMDD-HHmm}, using YYYY YY MM DD HH mm ss<span id="dragHint"><br>Drag the spreadsheet icon into a folder or an email to save the file.</span></p>
+        <div class="dragfile" id="dragFile" draggable="true" title="Drag into a folder or email">
+          <svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M3 1h14l7 7v21H3z" fill="var(--panel)" stroke="var(--ok)" stroke-width="2" stroke-linejoin="round"/><path d="M17 1v7h7" fill="none" stroke="var(--ok)" stroke-width="2" stroke-linejoin="round"/><path d="M7 14h12M7 18.5h12M7 23h12M12 12v13" fill="none" stroke="var(--ok)" stroke-width="1.6"/></svg>
+          <span class="mono dragname" id="dragName"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-chart">
+      <header><h2 id="h-chart">Measurements</h2><div class="seg" id="viewChart" role="group" aria-label="Show"><button type="button" data-v="temp">Temperature</button><button type="button" data-v="hum">Humidity</button><button type="button" data-v="both">Both</button></div></header>
+      <div class="chartwrap" id="chartWrap">
+        <svg class="chart" id="chart" viewBox="0 0 860 377" role="img" aria-label="Temperature over time"></svg>
+        <div class="readout mono" id="readout" hidden></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-stats">
+      <header><h2 id="h-stats">Stats</h2><div class="seg" id="viewStats" role="group" aria-label="Show"><button type="button" data-v="temp">Temperature</button><button type="button" data-v="hum">Humidity</button></div></header>
+      <div class="sumwrap">
+        <svg class="chart" id="hist" viewBox="0 0 860 300" role="img" aria-label="Histogram of temperature readings"></svg>
+        <svg class="chart" id="hist2" viewBox="0 0 860 300" role="img" aria-label="Histogram of humidity readings" hidden></svg>
+        <div class="stats" id="stats"></div>
+      </div>
+    </section>
+
+
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const state = { colOrder: null, colSig: "", colKeys: [], csvHead: null, view: { chart: "temp", stats: "temp" }, dur: 604800, spec: null, scen: null, demo: false, reader: null, device: null, data: null, file: null, fileInfo: null, lastRead: null, readAt: null, sourceKind: null, historyInfo: null };
+
+  /* ---------- helpers ---------- */
+  const pad = (n) => String(n).padStart(2, "0");
+  const fmtTime = (ms) => { const d = new Date(ms); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()); };
+  const fmtDur = (s) => { if (s < 60) return s + " s"; if (s < 3600) return +(s / 60).toFixed(1) + " min"; if (s < 86400) return +(s / 3600).toFixed(1) + " h"; return +(s / 86400).toFixed(1) + " d"; };
+  const fmtRate = (s) => (s % 3600 === 0 ? s / 3600 + " h" : s % 60 === 0 ? s / 60 + " min" : s + " s");
+  function crc8(bytes) { let crc = 0; for (let b of bytes) { for (let i = 0; i < 8; i++) { const mix = (crc ^ b) & 1; crc >>= 1; if (mix) crc ^= 0x8c; b >>= 1; } } return crc; }
+  const hex = (n) => n.toString(16).toUpperCase().padStart(2, "0");
+  function log(msg, level) {
+    const el = $("log"), row = document.createElement("div");
+    row.innerHTML = '<span class="t"></span><span class="' + (level || "") + '"></span>';
+    row.children[0].textContent = fmtTime(Date.now()).slice(11);
+    row.children[1].textContent = msg;
+    el.prepend(row);
+    while (el.children.length > 200) el.lastChild.remove();
+  }
+
+  /* ---------- demo data: iButton logger models and measurement applications ---------- */
+  // Approximate datasheet values: measuring range, resolution options with memory size (samples), and allowed sample interval.
+  const SPECS = [
+    { id: "DS1921G", name: "DS1921G Thermochron", family: "21h", fam: 0x21, min: -40, max: 85, minRate: 60, maxRate: 255 * 60, units: [60], resOpts: [{ res: 0.5, bits: 8, cap: 2048 }] },
+    { id: "DS1921H", name: "DS1921H Thermochron", family: "21h", fam: 0x21, min: 15, max: 46, minRate: 60, maxRate: 255 * 60, units: [60], resOpts: [{ res: 0.125, bits: 8, cap: 2048 }] },
+    { id: "DS1921Z", name: "DS1921Z Thermochron", family: "21h", fam: 0x21, min: -5, max: 26, minRate: 60, maxRate: 255 * 60, units: [60], resOpts: [{ res: 0.125, bits: 8, cap: 2048 }] },
+    { id: "DS1922L", name: "DS1922L Thermochron", family: "41h", fam: 0x41, min: -40, max: 85, minRate: 1, maxRate: 273 * 3600, units: [1, 60, 3600], resOpts: [{ res: 0.5, bits: 8, cap: 8192 }, { res: 0.0625, bits: 16, cap: 4096 }] },
+    { id: "DS1922T", name: "DS1922T Thermochron", family: "41h", fam: 0x41, min: 0, max: 125, minRate: 1, maxRate: 273 * 3600, units: [1, 60, 3600], resOpts: [{ res: 0.5, bits: 8, cap: 8192 }, { res: 0.0625, bits: 16, cap: 4096 }] },
+    { id: "DS1922E", name: "DS1922E Thermochron", family: "41h", fam: 0x41, min: 15, max: 140, minRate: 1, maxRate: 273 * 3600, units: [1, 60, 3600], resOpts: [{ res: 0.5, bits: 8, cap: 8192 }, { res: 0.0625, bits: 16, cap: 4096 }] },
+    { id: "DS1923", name: "DS1923 Hygrochron (temperature and humidity)", hasHum: true, family: "41h", fam: 0x41, min: -20, max: 85, minRate: 1, maxRate: 273 * 3600, units: [1, 60, 3600], resOpts: [{ res: 0.5, bits: 8, cap: 4096 }, { res: 0.0625, bits: 16, cap: 2048 }] },
+    { id: "DS1925", name: "DS1925 Thermochron", family: "53h", fam: 0x53, min: -40, max: 85, minRate: 180, maxRate: 273 * 3600, units: [1, 60, 3600], noRollover: true, resOpts: [{ res: 0.5, bits: 8, cap: 125440 }, { res: 0.0625, bits: 16, cap: 62720 }] }
+  ];
+  const DEFAULT_SPEC = SPECS[3];
+  const specNow = () => (state.device && state.device.spec) || state.spec || DEFAULT_SPEC;
+  const specByName = (n) => SPECS.find((s) => String(n || "").indexOf(s.id) >= 0) || DEFAULT_SPEC;
+  const optFor = (res, spec) => { spec = spec || specNow(); return spec.resOpts.find((o) => Math.abs(o.res - res) < 1e-9) || spec.resOpts[0]; };
+  const capFor = (res, spec) => optFor(res, spec).cap;
+  const pickRes = (spec, want) => spec.resOpts.find((o) => o.res === want) || (want < 0.5 ? spec.resOpts[spec.resOpts.length - 1] : spec.resOpts[0]);
+  const clampRate = (spec, r) => Math.max(spec.minRate, Math.min(spec.maxRate, r));
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const frac = (x) => x - Math.floor(x);
+  const rnd = (n, seed) => frac(Math.abs(Math.sin(n * 12.9898 + seed * 78.233) * 43758.5453));
+  const localHour = (t) => { const d = new Date(t); return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600; };
+  const dayIdx = (t) => Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 86400000);
+  const ramp = (h, a, b) => clamp((h - a) / (b - a), 0, 1);
+  // event that starts at hour s: quick rise, slow decay (amp is the scale, the peak is about 60% of it)
+  const hit = (h, s, amp, rise, decay) => (h < s ? 0 : amp * (1 - Math.exp(-(h - s) / rise)) * Math.exp(-(h - s) / decay));
+  const jitter = (i, seed, a) => a * Math.sin(i * 12.9898 + seed) * Math.cos(i * 0.37);
+
+  const SCENARIOS = [
+    { id: "room", group: "Buildings and indoor", label: "Room temperature (air-conditioned office)", rateSec: 600, high: 26, low: 20, resWant: 0.0625, hint: [22.5, 26.5], rh: { base: 48, ref: 23.5, k: 0.06, noise: 0.6 },
+      desc: "Air conditioning runs from 08:00 to 19:00 and cycles every 25 minutes. The room warms up overnight.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t), cyc = 0.5 * Math.sin((2 * Math.PI * tm) / 25);
+        const off = (x) => 23.2 + 2.8 * (1 - Math.exp(-x / 2.5));
+        let v;
+        if (h >= 19 || h < 8) v = off(h >= 19 ? h - 19 : h + 5);
+        else v = 23.2 + (off(13) - 23.2) * Math.exp(-(h - 8) / 0.4) + cyc;
+        return v + 0.6 * Math.sin(di * 1.7 + seed) + jitter(i, seed, 0.06);
+      } },
+    { id: "bedroom", group: "Buildings and indoor", label: "Bedroom", rateSec: 300, high: 30, low: 24, resWant: 0.0625, hint: [25.5, 30], rh: { base: 60, ref: 27, k: 0.06, noise: 0.6 },
+      desc: "Warm evening, then air conditioning at about 26 °C from 22:00 to 07:00, warming again after wake up.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t);
+        let v;
+        if (h >= 22 || h < 7) { const hs = h >= 22 ? h - 22 : h + 2; v = 26 + 0.55 * Math.sin((2 * Math.PI * tm) / 22) + 2.5 * Math.exp(-hs / 0.5) + 0.25 * Math.sin((2 * Math.PI * hs) / 9); }
+        else { const base = 28.8 + Math.cos((2 * Math.PI * (h - 15)) / 24); v = base + (26.5 - base) * Math.exp(-(h - 7) / 1.5) + 0.25 * Math.sin((2 * Math.PI * tm) / 22); }
+        return v + 0.5 * Math.sin(di * 2.3 + seed) + jitter(i, seed, 0.05);
+      } },
+    { id: "skin", group: "Body and animals", label: "Human skin temperature (wrist)", rateSec: 300, high: 36, low: 30, resWant: 0.0625, hint: [27, 35.5], rh: { base: 58, ref: 32.6, k: 0.05, noise: 1.2 },
+      desc: "Warmer while asleep and cooler and more variable by day. The logger comes off the wrist for a morning shower and sometimes in the evening.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t);
+        const sleepW = h >= 12 ? ramp(h, 22.5, 23.5) : 1 - ramp(h, 6.5, 7.5);
+        const day = 32.6 + 0.5 * Math.sin((2 * Math.PI * tm) / 47) + 0.35 * Math.sin((2 * Math.PI * tm) / 13.3 + seed);
+        const night = 34.4 + 0.35 * Math.sin((2 * Math.PI * (h + 1)) / 9);
+        const base = day * (1 - sleepW) + night * sleepW;
+        const offW = (s, dur) => (h < s ? 0 : h < s + dur ? 1 : Math.exp(-(h - s - dur) / 0.25));
+        const s1 = 7.2 + rnd(di, seed) * 1.2, s2 = 20.5 + rnd(di + 50, seed) * 1.0;
+        const off = Math.max(offW(s1, 0.35), rnd(di + 7, seed) > 0.5 ? offW(s2, 0.3) : 0);
+        return base * (1 - off) + 28 * off + jitter(i, seed, 0.12);
+      } },
+    { id: "outdoorTropical", group: "Outdoor and environment", label: "Outdoor temperature (tropical)", rateSec: 600, high: 34, low: 24, resWant: 0.5, hint: [24, 33], rh: { base: 78, ref: 28.3, k: 0.06, noise: 1.0 },
+      desc: "Daily cycle peaking mid afternoon, with rain showers cooling the air on many afternoons.",
+      f(t, i, seed) {
+        const h = localHour(t), di = dayIdx(t);
+        let v = 28.3 + 3.7 * Math.cos((2 * Math.PI * (h - 14)) / 24) + 0.8 * Math.sin(di * 1.9 + seed);
+        if (rnd(di + 3, seed) > 0.4) v -= hit(h, 14.5 + rnd(di + 9, seed) * 2.5, 7, 0.3, 1.4);
+        return v + jitter(i, seed, 0.25);
+      } },
+    { id: "outdoorTemperate", group: "Outdoor and environment", label: "Outdoor temperature (temperate winter)", rateSec: 600, high: 15, low: -5, resWant: 0.5, hint: [-3, 14], rh: { base: 76, ref: 7, k: 0.05, noise: 0.8 },
+      desc: "Cold winter days with a small daily cycle and weather fronts moving through over several days.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t);
+        return 7 + 4.5 * Math.cos((2 * Math.PI * (h - 15)) / 24) + 3.5 * Math.sin(di * 1.1 + seed) + 0.6 * Math.sin(tm / 20) + jitter(i, seed, 0.2);
+      } },
+    { id: "radiator", group: "Buildings and indoor", label: "Heating radiator surface", rateSec: 120, high: 70, low: 25, resWant: 0.5, hint: [22, 74], rh: { base: 38, ref: 22, k: 0.035, noise: 0.5 },
+      desc: "The thermostat cycles the radiator every 90 minutes, with a night setback and an occasional evening boost.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t), phase = tm % 90, a = 35, b = 55, room = 20, t1 = 10, t2 = 30;
+        const boost = h >= 18 && h < 20 && rnd(di + 5, seed) > 0.6;
+        const tmax = boost ? 75 : h >= 6 && h < 22 ? 62 : 38;
+        const e1 = Math.exp(-a / t1), e2 = Math.exp(-b / t2);
+        const x1 = (tmax * (1 - e1) + e1 * room * (1 - e2)) / (1 - e1 * e2), x0 = room + (x1 - room) * e2;
+        const v = phase < a ? tmax + (x0 - tmax) * Math.exp(-phase / t1) : room + (x1 - room) * Math.exp(-(phase - a) / t2);
+        return v + jitter(i, seed, 0.3);
+      } },
+    { id: "fridge", group: "Food and cold chain", label: "Refrigerator (cold chain)", rateSec: 300, high: 8, low: 2, resWant: 0.0625, hint: [2.5, 8.5], rh: { base: 82, ref: 4.6, k: 0.04, noise: 0.8 },
+      desc: "Compressor cycling, defrost at 03:00 and 15:00, and door openings during the day.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t);
+        let v = 4.6 + 0.9 * Math.sin((2 * Math.PI * tm) / 42) + 0.3 * Math.sin(di * 1.3 + seed);
+        [3, 15].forEach((s) => { if (h >= s && h < s + 0.4) v += 2.8 * Math.sin((Math.PI * (h - s)) / 0.4); });
+        for (let k = 0; k < 6; k++) { if (rnd(di * 7 + k + 40, seed) > 0.45) v += hit(h, 7 + k * 2.2 + rnd(di * 10 + k, seed) * 1.5, 3.4, 0.05, 0.25); }
+        return v + jitter(i, seed, 0.06);
+      } },
+    { id: "museum", group: "Buildings and indoor", label: "Museum or archive environment", rateSec: 900, high: 24, low: 18, resWant: 0.0625, hint: [20, 23], rh: { base: 50, ref: 21, k: 0.05, noise: 0.5, slow: 2 }, humid: true,
+      desc: "Very stable air conditioning around 21 °C, with small daily swings and a slight rise on open days when visitors are in the galleries.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t), open = h >= 10 && h < 17 ? 0.4 : 0;
+        return 21 + 0.3 * Math.cos((2 * Math.PI * (h - 15)) / 24) + 0.2 * Math.sin((2 * Math.PI * tm) / 35) + open + 0.2 * Math.sin(di * 1.4 + seed) + jitter(i, seed, 0.03);
+      } },
+    { id: "mold", group: "Buildings and indoor", label: "Mold risk assessment (damp basement)", rateSec: 900, high: 25, low: 8, resWant: 0.0625, hint: [13, 20], rh: { base: 82, ref: 16, k: 0.06, noise: 1.5, slow: 6 }, humid: true,
+      desc: "Cool, poorly ventilated basement with damp spells lasting a day or more. Mold risk is mostly about relative humidity above 80 %, so use a logger that records it.",
+      f(t, i, seed) {
+        const h = localHour(t), di = dayIdx(t);
+        return 16 + 1.3 * Math.cos((2 * Math.PI * (h - 18)) / 24) + 1.5 * Math.sin(di * 0.9 + seed) + jitter(i, seed, 0.05);
+      } },
+    { id: "warehouse", group: "Buildings and indoor", label: "Warehouse monitoring (ambient storage)", rateSec: 900, high: 28, low: 10, resWant: 0.0625, hint: [13, 27], rh: { base: 60, ref: 20, k: 0.05, noise: 1, slow: 3 }, humid: true,
+      desc: "Large unconditioned building that follows the outdoor cycle with a lag, with brief cool draughts when dock doors open on working days.",
+      f(t, i, seed) {
+        const h = localHour(t), di = dayIdx(t), dow = new Date(t).getDay(), work = dow > 0 && dow < 6 && h >= 7 && h < 17;
+        let v = 19 + 4.5 * Math.cos((2 * Math.PI * (h - 17)) / 24) + 2.2 * Math.sin(di * 1.15 + seed);
+        if (work) for (let k = 0; k < 4; k++) v -= hit(h, 7.5 + k * 2.3 + rnd(di * 5 + k, seed), 3, 0.05, 0.3);
+        return v + jitter(i, seed, 0.1);
+      } },
+    { id: "roof", group: "Buildings and indoor", label: "Roof surface temperature", rateSec: 300, high: 70, low: 10, resWant: 0.5, hint: [18, 65], rh: { base: 45, ref: 28, k: 0.05, noise: 1 },
+      desc: "Dark roof heated by the sun to more than 60 °C, dropping quickly when clouds pass, and cooling below air temperature at night.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t);
+        const sun = h > 6.5 && h < 19 ? Math.pow(Math.sin((Math.PI * (h - 6.5)) / 12.5), 1.3) : 0;
+        const cloud = rnd(Math.floor(tm / 25), seed + di) > 0.75 ? 0.55 : 1;
+        return 22 - 3 * (h > 19 || h < 6.5 ? 1 : 0) + 42 * sun * cloud + 1.5 * Math.sin(di * 1.3 + seed) + jitter(i, seed, 0.3);
+      } },
+    { id: "nest", group: "Body and animals", label: "Nest temperature (bird incubation)", rateSec: 300, high: 39, low: 30, resWant: 0.0625, hint: [26, 38], rh: { base: 70, ref: 36, k: 0.03, noise: 1 },
+      desc: "Eggs kept near 37 °C by the parent, with cooling while the parent is away feeding on short trips by day, and steady warmth at night.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, day = h >= 6 && h < 19;
+        if (!day) return 36.8 + 0.2 * Math.sin(tm / 40 + seed) + jitter(i, seed, 0.05);
+        const p = tm % 70, g = p < 14 ? 1 - Math.exp(-p / 7) : Math.exp(-(p - 14) / 5) * (1 - Math.exp(-2));
+        return 36.7 - 9.5 * g + jitter(i, seed, 0.08);
+      } },
+    { id: "soil", group: "Outdoor and environment", label: "Soil temperature (10 cm depth)", rateSec: 900, high: 30, low: 10, resWant: 0.0625, hint: [15, 26], rh: { base: 92, ref: 20, k: 0.01, noise: 0.4 },
+      desc: "Damped daily cycle with a delay of several hours behind the air, plus a slow drift as weather changes over the week.",
+      f(t, i, seed) {
+        const h = localHour(t), di = dayIdx(t);
+        return 20.5 + 1.8 * Math.cos((2 * Math.PI * (h - 17)) / 24) + 2.5 * Math.sin(di * 0.55 + seed) + jitter(i, seed, 0.03);
+      } },
+    { id: "lake", group: "Outdoor and environment", label: "Lake temperature (surface water)", rateSec: 900, high: 30, low: 18, resWant: 0.0625, hint: [22, 26], rh: { base: 80, ref: 24, k: 0.05, noise: 1 },
+      desc: "Large thermal mass with a daily swing of only about 1 °C, peaking late afternoon, and slow changes with the weather.",
+      f(t, i, seed) {
+        const h = localHour(t), di = dayIdx(t);
+        return 24 + 0.55 * Math.cos((2 * Math.PI * (h - 16)) / 24) + 0.9 * Math.sin(di * 0.8 + seed) + jitter(i, seed, 0.04);
+      } },
+    { id: "greenhouse", group: "Outdoor and environment", label: "Greenhouse temperature", rateSec: 600, high: 32, low: 12, resWant: 0.0625, hint: [13, 33], rh: { base: 62, ref: 22, k: 0.06, noise: 1.5, slow: 3 }, humid: true,
+      desc: "Warm during sunny days and held near 30 °C once the vents open, cooling to about 14 °C at night. Cloudy days stay cooler.",
+      f(t, i, seed) {
+        const h = localHour(t), di = dayIdx(t), cloudy = rnd(di + 2, seed) > 0.7 ? 0.55 : 1;
+        const sun = h > 6 && h < 19 ? Math.sin((Math.PI * (h - 6)) / 13) : 0;
+        let v = 15.5 + 20 * sun * cloudy;
+        if (v > 29) v = 29 + 0.25 * (v - 29);
+        return v + jitter(i, seed, 0.15);
+      } },
+    { id: "solar", group: "Outdoor and environment", label: "Solar thermal collector", rateSec: 300, high: 90, low: 10, resWant: 0.5, hint: [10, 92], rh: { base: 40, ref: 25, k: 0.045, noise: 1 },
+      desc: "Absorber pipe reaching 70 to 90 °C in full sun, with the circulation pump cutting in when it is hot. Use the DS1922E for the full range.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000, di = dayIdx(t), cloud = rnd(Math.floor(tm / 30), seed + di) > 0.8 ? 0.45 : 1;
+        const sun = h > 6.5 && h < 18.5 ? Math.pow(Math.sin((Math.PI * (h - 6.5)) / 12), 1.1) : 0;
+        const raw = 14 + 82 * sun * cloud;
+        return (raw > 70 ? 70 + 0.25 * (raw - 70) + 3 * Math.sin(tm * 0.9) : raw) + jitter(i, seed, 0.3);
+      } },
+    { id: "food", group: "Food and cold chain", label: "Food safety compliance (cooking and cooling)", rateSec: 60, high: 60, low: 5, resWant: 0.5, hint: [3, 76], rh: { base: 40, ref: 20, k: 0.03, noise: 1 },
+      desc: "Two batches a day are cooked to about 72 °C, held hot, then chilled. The two-stage cooling curve is the compliance check (for example 60 to 21 °C within 2 hours).",
+      f(t, i, seed) {
+        const h = localHour(t), di = dayIdx(t);
+        const batch = (s) => { const d = h - s; return d < 0 ? 0 : d < 0.4 ? 68 * (d / 0.4) : d < 1 ? 68 : 68 * Math.exp(-(d - 1) / 1.1); };
+        const b = Math.max(batch(10.5 + rnd(di, seed) * 0.8), batch(16.5 + rnd(di + 9, seed) * 0.8));
+        return 4.5 + b + 0.4 * Math.sin(i * 0.9) + jitter(i, seed, 0.2);
+      } },
+    { id: "ferment", group: "Food and cold chain", label: "Fermentation monitoring (beer)", rateSec: 600, high: 22, low: 16, resWant: 0.0625, hint: [17.5, 23], rh: { base: 65, ref: 19, k: 0.05, noise: 0.8 },
+      desc: "Chamber held near 19 °C by a thermostat. Active fermentation adds a few degrees, peaking around 30 hours after pitching, then fading.",
+      f(t, i, seed, m) {
+        const hrs = m && m.startAt ? (t - m.startAt) / 3600000 : 0, tm = t / 60000;
+        const heat = 3 * Math.exp(-Math.pow((hrs - 30) / 14, 2)) * (hrs > 4 ? 1 : hrs / 4);
+        return 19 + heat + 0.35 * Math.sin((2 * Math.PI * tm) / 40) + jitter(i, seed, 0.04);
+      } },
+    { id: "transport", group: "Food and cold chain", label: "Transport validation (refrigerated truck)", rateSec: 300, high: 8, low: 2, resWant: 0.0625, hint: [2, 26], rh: { base: 78, ref: 5, k: 0.04, noise: 1.5 },
+      desc: "Loading at a warm dock, pull down to about 5 °C, defrost cycles every 6 hours and warm spikes at delivery stops. The check is time spent outside 2 to 8 °C.",
+      f(t, i, seed, m) {
+        const hrs = m && m.startAt ? (t - m.startAt) / 3600000 : 3;
+        let v = hrs < 1.2 ? 24 : 5 + 19 * Math.exp(-(hrs - 1.2) / 0.5);
+        v += 0.7 * Math.sin((2 * Math.PI * t) / 1500000);
+        const df = hrs % 6; if (hrs > 2 && df < 0.3) v += 2.4 * Math.sin((Math.PI * df) / 0.3);
+        for (let k = 0; k < 6; k++) { const s = 4.5 + k * 7 + rnd(k, seed) * 2; if (hrs > s) v += hit(hrs, s, 12, 0.05, 0.22); }
+        return v + jitter(i, seed, 0.05);
+      } },
+    { id: "process", group: "Industry and construction", label: "Process monitoring (pasteurization, sterilization)", rateSec: 30, high: 125, low: 20, resWant: 0.5, hint: [22, 123], rh: { base: 40, ref: 22, k: 0.05, noise: 0.5 },
+      desc: "An autoclave runs a cycle every 4 hours from 06:00 to 22:00: heat up to 121 °C, hold for 20 minutes, then cool. Use the DS1922E, which measures up to 140 °C.",
+      f(t, i, seed) {
+        const h = localHour(t), tm = t / 60000;
+        if (h < 6 || h >= 22) return 22 + jitter(i, seed, 0.2);
+        const p = tm % 240;
+        if (p < 25) return 25 + (96 * (1 - Math.exp(-p / 9))) / (1 - Math.exp(-25 / 9)) + jitter(i, seed, 0.3);
+        if (p < 45) return 121 + 0.6 * Math.sin(p * 2.1) + jitter(i, seed, 0.2);
+        if (p < 85) return 40 + 81 * Math.exp(-(p - 45) / 12) + jitter(i, seed, 0.3);
+        return 22 + 21 * Math.exp(-(p - 85) / 30) + jitter(i, seed, 0.2);
+      } },
+    { id: "concrete", group: "Industry and construction", label: "Concrete maturity (curing)", rateSec: 600, high: 60, low: 5, resWant: 0.5, hint: [18, 45], rh: { base: 90, ref: 25, k: 0.03, noise: 0.5 },
+      desc: "Heat of hydration warms a fresh pour by about 20 °C over the first day, peaking around 16 hours after the start, then slowly falling back to the outdoor cycle.",
+      f(t, i, seed, m) {
+        const hrs = m && m.startAt ? (t - m.startAt) / 3600000 + 0.5 : 24, h = localHour(t);
+        const x = hrs / 16, heat = 23 * x * Math.exp(1 - x);
+        return 19 + 3 * Math.cos((2 * Math.PI * (h - 15)) / 24) + heat + jitter(i, seed, 0.1);
+      } }
+  ];
+  const DEFAULT_SCEN = SCENARIOS[0];
+
+  function makeDemoDevice(spec, scen) {
+    spec = spec || DEFAULT_SPEC; scen = scen || DEFAULT_SCEN;
+    const idx = SPECS.indexOf(spec) + 1, serial = [0x3a, 0x91, 0x0c, 0x5e, idx, 0x00];
+    const rom = [crc8([spec.fam, ...serial]), ...serial.slice().reverse(), spec.fam].map(hex).join("");
+    const dev = {
+      kind: "demo", rom, model: spec.name, family: spec.family, spec, scen, capacity: spec.resOpts[0].cap,
+      simNow: Date.now(), lastTick: Date.now(), speed: 1,
+      mission: null, clock: Date.now(),
+      tick() { const n = Date.now(); this.simNow += (n - this.lastTick) * this.speed; this.lastTick = n; },
+      // Simulated reading: the application profile, limited to the logger's measuring range and rounded to its resolution.
+      temp(i, t, m) {
+        const v = clamp(this.scen.f(t, i, m.seed || 0, m), this.spec.min, this.spec.max);
+        return Math.round(v / m.res) * m.res;
+      },
+      // Relative humidity follows the application temperature (warmer air at the same moisture is drier), for loggers that measure it.
+      hum(i, t, m) {
+        const r = this.scen.rh, T = this.scen.f(t, i, m.seed || 0, m);
+        const v = clamp(r.base * Math.exp(-r.k * (T - r.ref)) + r.noise * Math.sin(i * 7.31 + (m.seed || 0)) * Math.cos(i * 0.21) + (r.slow || 0) * Math.sin(t / 3600000 / 9 + (m.seed || 0)), 3, 99);
+        return Math.round(v * 10) / 10;
+      },
+      // Start builds a fresh history: up to 48 h (or the memory size) of samples at the chosen interval, ending now.
+      async start(cfg) {
+        this.tick();
+        const cap = capFor(cfg.res, this.spec), maxN = cfg.rollover ? Math.floor(cap * 1.5) : cap;
+        const n = Math.min(maxN, Math.max(1, Math.ceil((state.dur || 1e12) / cfg.rateSec)));
+        const startAt = this.simNow - (n - 1) * cfg.rateSec * 1000 + cfg.delaySec * 1000;
+        this.mission = { ...cfg, highOn: cfg.alarmHigh, lowOn: cfg.alarmLow, startAt, stopped: false, stoppedAt: null, seed: Math.random() * 1000 };
+        this.clock = cfg.sync ? this.simNow : this.clock;
+      },
+      async stop() { this.tick(); if (this.mission && !this.mission.stopped) { this.mission.stopped = true; this.mission.stoppedAt = this.simNow; } },
+      async clear() { this.mission = null; },
+      async read() {
+        this.tick();
+        const m = this.mission;
+        if (!m) return { status: "idle", samples: [], mission: null, clock: this.simNow };
+        const end = m.stopped ? m.stoppedAt : this.simNow;
+        const total = end < m.startAt ? 0 : Math.floor((end - m.startAt) / (m.rateSec * 1000)) + 1;
+        const cap = capFor(m.res, this.spec); this.capacity = cap;
+        const full = total > cap;
+        const kept = m.rollover ? total : Math.min(total, cap);
+        const first = Math.max(0, total - Math.min(total, cap));
+        const samples = [];
+        const from = m.rollover ? first : 0;
+        for (let i = from; i < (m.rollover ? total : kept); i++) {
+          const t = m.startAt + i * m.rateSec * 1000;
+          { const pt = { i: i - from + 1, t, v: this.temp(i, t, m) }; if (this.spec.hasHum) pt.h = this.hum(i, t, m); samples.push(pt); }
+        }
+        let status = "running";
+        if (m.stopped) status = "done";
+        else if (end < m.startAt) status = "waiting";
+        else if (full && !m.rollover) status = "full";
+        return { status, samples, mission: m, clock: this.simNow };
+      }
+    };
+    // preloaded example mission: about 2 days of the chosen application, still running
+    const rateSec = clampRate(spec, scen.rateSec), opt = pickRes(spec, scen.resWant), n = Math.min(opt.cap, Math.max(1, Math.ceil((state.dur || 1e12) / rateSec)));
+    dev.mission = { rateSec, high: scen.high, low: scen.low, highOn: false, lowOn: false, res: opt.res, rollover: false, delaySec: 0, startAt: dev.simNow - (n - 1) * rateSec * 1000, stopped: false, stoppedAt: null, sync: true, seed: 0 };
+    dev.capacity = opt.cap;
+    return dev;
+  }
+
+  // set the Mission setup form to what the selected logger supports and the application suggests
+  function applySpecToForm(spec, scen) {
+    const opt = pickRes(spec, scen.resWant), rate = clampRate(spec, scen.rateSec);
+    $("cfgRes").innerHTML = spec.resOpts.map((o) => '<option value="' + o.res + '">' + o.res + " °C (" + o.bits + " bit)</option>").join("");
+    $("cfgRes").value = String(opt.res);
+    const names = { 1: "seconds", 60: "minutes", 3600: "hours" };
+    $("cfgUnit").innerHTML = spec.units.map((u) => '<option value="' + u + '">' + names[u] + "</option>").join("");
+    const unit = spec.units.slice().reverse().find((u) => rate % u === 0) || spec.units[0];
+    $("cfgUnit").value = String(unit); $("cfgRate").value = Math.max(1, Math.round(rate / unit));
+    $("cfgHigh").value = scen.high; $("cfgLow").value = scen.low; $("cfgDelay").value = 0;
+    updateEstimate();
+  }
+
+  function deviceNote(spec) {
+    const ranges = spec.resOpts.map((o) => o.cap.toLocaleString() + " samples at " + o.res + " °C").join(", or ");
+    const rateTxt = (spec.minRate >= 60 ? fmtRate(spec.minRate) : "1 s") + " to " + (spec.maxRate >= 3600 * 100 ? "273 h" : "255 min");
+    return spec.min + " to " + spec.max + " °C, " + ranges + ", sample interval " + rateTxt + "." + (spec.hasHum ? " Also records relative humidity." : "") + " ";
+  }
+  function appNote(spec, scen) {
+    let text = scen.desc;
+    if (scen.humid && !spec.hasHum) text += " Humidity matters for this application: pick the DS1923 to record it.";
+    if (scen.hint[0] < spec.min || scen.hint[1] > spec.max) text += " This application reaches about " + scen.hint[0] + " to " + scen.hint[1] + " °C, outside the range of this logger, so readings are cut off at its limits.";
+    return text;
+  }
+  function selectDemo(specId, scenId, quiet) {
+    state.spec = SPECS.find((s) => s.id === specId) || DEFAULT_SPEC;
+    state.scen = SCENARIOS.find((s) => s.id === scenId) || DEFAULT_SCEN;
+    $("demoModel").value = state.spec.id; $("demoScenario").value = state.scen.id;
+    const dn = $("demoNoteDev"); dn.textContent = "";
+    const link = document.createElement("a"); link.href = sheetUrl(state.spec); link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = "Datasheet";
+    dn.appendChild(link); dn.appendChild(document.createTextNode(" | " + deviceNote(state.spec).trim()));
+    $("demoNoteApp").textContent = appNote(state.spec, state.scen);
+    if (state.demo) { state.device = makeDemoDevice(state.spec, state.scen); state.data = null; state.file = null; state.csvHead = null; state.fileInfo = null; state.sourceKind = null; state.historyInfo = null; applySpecToForm(state.spec, state.scen); }
+    if (!quiet) log("Demo logger " + state.spec.name + ", application: " + state.scen.label + ", " + (state.dur ? fmtLong(state.dur) : "until memory is full") + ".", "o");
+  }
+
+  /* ---------- real reader: DS9490R (DS2490 USB to 1-Wire bridge) over WebUSB ---------- */
+  // DS2490 vendor requests (datasheet "DS2490 Universal Serial Bus to 1-Wire Bridge"): control, communication and mode commands on EP0,
+  // status and result codes on the interrupt endpoint EP1, data to the bus on bulk EP2, data from the bus on bulk EP3.
+  const DS2490 = (() => {
+    const CONTROL = 0x00, COMM = 0x01, MODE = 0x02;
+    const CTL_RESET_DEVICE = 0x0000, MOD_PULSE_EN = 0x0000, MOD_SPU_DURATION = 0x0003, PULSE_SPUE = 0x02;
+    const COMM_RESET = 0x0042, COMM_BYTE_IO = 0x0052, COMM_BLOCK_IO = 0x0074, COMM_SEARCH = 0x00f4;
+    const IM = 0x0001, SM = 0x0008, RST = 0x0100, F = 0x0800, SPU = 0x1000;
+    const ST_IDLE = 0x20, RR_DETECT = 0xa5, RR_NRS = 0x01, RR_SH = 0x02;
+    const u8 = (dv) => new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    class Reader {
+      constructor(dev) { this.dev = dev; this.productName = dev.productName || "DS9490R"; this.q = Promise.resolve(); }
+      static async open(dev) {
+        if (!dev.opened) await dev.open();
+        if (!dev.configuration) await dev.selectConfiguration(1);
+        if (!dev.configuration.interfaces[0].claimed) await dev.claimInterface(0);
+        try { await dev.selectAlternateInterface(0, 3); } catch (e) { /* alternate setting 0 still works, with 16-byte packets */ }
+        // a session that ended mid-transfer leaves the bulk data toggles out of step, and the bridge then ignores the next data packet
+        for (const [dir, ep] of [["out", 2], ["in", 3], ["in", 1]]) { try { await dev.clearHalt(dir, ep); } catch (e) {} }
+        const r = new Reader(dev);
+        await r.ctl(CONTROL, CTL_RESET_DEVICE, 0);
+        await r.ctl(MODE, MOD_PULSE_EN, PULSE_SPUE);
+        await r.waitIdle();
+        return r;
+      }
+      // one 1-Wire conversation at a time: callers queue behind each other
+      lock(fn) { const p = this.q.then(fn, fn); this.q = p.catch(() => {}); return p; }
+      ctl(request, value, index) { return this.dev.controlTransferOut({ requestType: "vendor", recipient: "device", request, value, index }, new Uint8Array(0)); }
+      async status() { const r = await this.dev.transferIn(1, 32); return u8(r.data); }
+      // poll status until the bridge is idle; bytes after the 16-byte status block are result codes
+      async waitIdle() {
+        const results = [];
+        for (let i = 0; i < 400; i++) {
+          const s = await this.status();
+          for (let k = 16; k < s.length; k++) results.push(s[k]);
+          if (s.length >= 16 && s[8] & ST_IDLE && s[11] === 0) return { st: s, results };
+        }
+        throw new Error("The USB reader stopped responding.");
+      }
+      async readIn(n) {
+        const out = new Uint8Array(n); let got = 0;
+        while (got < n) { const r = await this.dev.transferIn(3, n - got), d = u8(r.data); if (!d.length) throw new Error("The USB reader returned no data."); out.set(d, got); got += d.length; }
+        return out;
+      }
+      // 1-Wire reset; true when a device answered with a presence pulse
+      async reset() {
+        await this.ctl(COMM, COMM_RESET | F | IM, 0);
+        const { results } = await this.waitIdle(), errs = results.filter((r) => r !== RR_DETECT);
+        if (errs.some((r) => r & RR_SH)) throw new Error("The 1-Wire bus is short-circuited.");
+        return !errs.some((r) => r & RR_NRS);
+      }
+      // write bytes to the bus and return the bytes read back in the same time slots (send 0xFF to read)
+      async block(bytes) {
+        bytes = Uint8Array.from(bytes);
+        const out = new Uint8Array(bytes.length);
+        for (let o = 0; o < bytes.length; o += 64) {
+          const chunk = bytes.subarray(o, o + 64);
+          await this.dev.transferOut(2, chunk);
+          await this.ctl(COMM, COMM_BLOCK_IO | IM, chunk.length);
+          await this.waitIdle();
+          out.set(await this.readIn(chunk.length), o);
+        }
+        return out;
+      }
+      // hardware search (Search ROM F0h) for every device on the bus; ROM IDs come back in bus order, family code first
+      async search() {
+        await this.dev.transferOut(2, new Uint8Array(8));
+        await this.ctl(COMM, COMM_SEARCH | IM | SM | RST | F, 0xf0);
+        const buf = [];
+        for (let i = 0; i < 400; i++) {
+          const s = await this.status();
+          if (s.length < 16) continue;
+          if (s[13]) buf.push(...(await this.readIn(s[13])));
+          if (s[8] & ST_IDLE && s[11] === 0 && !s[13]) break;
+        }
+        const roms = [];
+        for (let k = 0; k + 8 <= buf.length; k += 8) { const r = buf.slice(k, k + 8); if (r.some((b) => b) && crc8(r.slice(0, 7)) === r[7]) roms.push(r); }
+        return roms;
+      }
+      // send one byte, then hold the bus at 5 V (strong pullup) for ms so the iButton can power an internal operation
+      async byteSpu(b, ms) {
+        const dur = Math.min(255, Math.ceil(ms / 16) + 1);
+        if (dur !== this.spuDur) { await this.ctl(MODE, MOD_SPU_DURATION, dur); this.spuDur = dur; }
+        await this.ctl(COMM, COMM_BYTE_IO | IM | SPU, b);
+        await new Promise((res) => setTimeout(res, ms));
+        await this.waitIdle();
+        return (await this.readIn(1))[0];
+      }
+      // reset and address one device (Match ROM 55h)
+      async select(romBus) { if (!(await this.reset())) throw new Error("No iButton answered. Check that it sits firmly in the reader."); await this.block([0x55, ...romBus]); }
+      async close() { try { await this.dev.releaseInterface(0); } catch (e) {} await this.dev.close(); }
+    }
+    return {
+      async connect() {
+        if (!("usb" in navigator)) throw new Error("WebUSB is not available here. Open this file directly in Chrome or Edge.");
+        const known = (await navigator.usb.getDevices()).find((d) => d.vendorId === 0x04fa && d.productId === 0x2490);
+        const dev = known || (await navigator.usb.requestDevice({ filters: [{ vendorId: 0x04fa, productId: 0x2490 }] }));
+        return Reader.open(dev);
+      },
+      Reader
+    };
+  })();
+
+  /* ---------- iButton logger protocols ---------- */
+  const crc16 = (bytes) => { let crc = 0; for (let b of bytes) { for (let i = 0; i < 8; i++) { const mix = (crc ^ b) & 1; crc >>= 1; if (mix) crc ^= 0xa001; b >>= 1; } } return crc; };
+  const bcd = (b) => (b >> 4) * 10 + (b & 15), toBcd = (n) => ((Math.floor(n / 10) % 10) << 4) | n % 10;
+  const le = (a, o, n) => { let v = 0; for (let k = n - 1; k >= 0; k--) v = v * 256 + a[o + k]; return v; };
+  // RTC or timestamp bytes (BCD seconds, minutes, hours, [weekday,] date, month, year) as local time; null when blank
+  function rtcRead(R, o, hasSec, hasDow) {
+    const s = hasSec ? bcd(R[o++] & 0x7f) : 0, mi = bcd(R[o++] & 0x7f), hb = R[o++];
+    const h = hb & 0x40 ? (bcd(hb & 0x1f) % 12) + (hb & 0x20 ? 12 : 0) : bcd(hb & 0x3f);
+    if (hasDow) o++;
+    const d = bcd(R[o++] & 0x3f), mo = bcd(R[o++] & 0x1f), y = bcd(R[o]);
+    if (!d || !mo) return null;
+    return new Date(2000 + y, mo - 1, d, h, mi, s).getTime();
+  }
+  function rtcBytes(ms, hasDow) {
+    const t = new Date(ms), b = [toBcd(t.getSeconds()), toBcd(t.getMinutes()), toBcd(t.getHours())];
+    if (hasDow) b.push(t.getDay() + 1);
+    b.push(toBcd(t.getDate()), toBcd(t.getMonth() + 1), toBcd(t.getFullYear() % 100));
+    return b;
+  }
+  // display order (CRC first, family code last) <-> 1-Wire bus order
+  const romToBus = (rom) => rom.match(/../g).map((x) => parseInt(x, 16)).reverse();
+  const busToRom = (b) => b.slice().reverse().map(hex).join("");
+
+  // shared memory functions: Read Memory with CRC (page CRC16 at the end of each 32-byte page), scratchpad write, verify and copy
+  async function owReadMem(rd, romBus, cmd, pw, addr, len, onPage) {
+    const out = new Uint8Array(len), pages = Math.ceil(len / 32);
+    let p = 0, tries = 0;
+    while (p < pages) {
+      const a = addr + p * 32, head = [cmd, a & 0xff, a >> 8];
+      await rd.select(romBus);
+      await rd.block([...head, ...pw]);
+      let first = true, ok = true;
+      for (; p < pages; p++) {
+        const r = await rd.block(new Array(34).fill(0xff)), data = r.subarray(0, 32);
+        if ((r[32] | (r[33] << 8)) !== (crc16(first ? [...head, ...data] : data) ^ 0xffff)) { ok = false; break; }
+        out.set(data.subarray(0, Math.min(32, len - p * 32)), p * 32); first = false; tries = 0;
+        if (onPage) onPage(p + 1, pages);
+      }
+      if (!ok && ++tries > 3) throw new Error("Data from the iButton failed the CRC check at address " + hex((addr + p * 32) >> 8) + hex((addr + p * 32) & 0xff) + "h. Reseat it and try again.");
+    }
+    await rd.reset();
+    return out;
+  }
+  // write to the scratchpad and read it back; returns the authorization bytes TA1, TA2, E/S for the copy command
+  async function owScratch(rd, romBus, addr, data) {
+    const ta = [addr & 0xff, addr >> 8];
+    await rd.select(romBus); await rd.block([0x0f, ...ta, ...data]);
+    await rd.select(romBus);
+    const r = await rd.block([0xaa, ...new Array(3 + data.length).fill(0xff)]);
+    const es = r[3];
+    if (r[1] !== ta[0] || r[2] !== ta[1] || (es & 0x3f) !== ((addr + data.length - 1) & 0x1f) || data.some((b, k) => r[4 + k] !== b)) throw new Error("Writing to the iButton failed: the scratchpad did not verify. Reseat it and try again.");
+    return [...ta, es];
+  }
+  async function owWrite(rd, romBus, addr, data, copyCmd, pw) {
+    const auth = await owScratch(rd, romBus, addr, data);
+    await owCommand(rd, romBus, [copyCmd, ...auth, ...(pw || [])]);
+  }
+  async function owCommand(rd, romBus, bytes) { await rd.select(romBus); await rd.block(bytes); await new Promise((res) => setTimeout(res, 20)); await rd.reset(); }
+
+  // DS1922L/T/E and DS1923 (family 41h). Register page 0200h-023Fh, data log 1000h-2FFFh. Passwords must be disabled.
+  const DS41 = {
+    dcb: { 0x20: ["DS1923", -41], 0x40: ["DS1922L", -41], 0x60: ["DS1922T", -1], 0x80: ["DS1922E", 14] },
+    PW: new Array(8).fill(0),
+    async regs(rd, rom) { return owReadMem(rd, rom, 0x69, this.PW, 0x0200, 64); },
+    info(R) {
+      const g = (a) => R[a - 0x200], d = this.dcb[g(0x226)];
+      if (!d) throw new Error("Unknown family 41h device (configuration byte " + hex(g(0x226)) + "h).");
+      if (g(0x227) === 0xaa) throw new Error("This logger has password protection enabled, which this console does not support.");
+      return { id: d[0], off: d[1] };
+    },
+    async read(rd, rom, onPage) {
+      const R = await this.regs(rd, rom), g = (a) => R[a - 0x200], inf = this.info(R), spec = SPECS.find((s) => s.id === inf.id);
+      const mc = g(0x213), etl = !!(mc & 1), ehl = !!(mc & 2) && spec.hasHum, tb = mc & 4 ? 2 : 1, hb = mc & 8 ? 2 : 1, ro = !!(mc & 0x10);
+      const mip = !!(g(0x215) & 2), rateRaw = g(0x206) | ((g(0x207) & 0x3f) << 8), rateSec = rateRaw * (g(0x212) & 2 ? 1 : 60);
+      const count = le(R, 0x20, 3), area = etl && ehl ? 4096 : 8192, cap = Math.floor(area / Math.max(etl ? tb : 1, ehl ? hb : 1));
+      const decT = (m, l) => m / 2 + inf.off + (l >> 5) / 16;
+      const mission = {
+        rateSec: rateSec || 60, res: tb === 2 ? 0.0625 : 0.5, high: decT(g(0x209), 0), low: decT(g(0x208), 0), rollover: ro,
+        highOn: !!(g(0x210) & 2), lowOn: !!(g(0x210) & 1),
+        delaySec: le(R, 0x16, 3) * 60, startAt: rtcRead(R, 0x19, true, false), stopped: !mip && count > 0, stoppedAt: null, sync: null
+      };
+      const kept = Math.min(count, cap), wrapped = ro && count > cap, first = count - kept, samples = [];
+      if (kept && etl) {
+        const span = (wrapped ? cap : kept), tRaw = await owReadMem(rd, rom, 0x69, this.PW, 0x1000, span * tb, onPage && ((a, b) => onPage(a, ehl ? 2 * b : b)));
+        const hRaw = ehl ? await owReadMem(rd, rom, 0x69, this.PW, 0x1000 + area, span * hb, onPage && ((a, b) => onPage(b + a, 2 * b))) : null;
+        for (let k = 0; k < kept; k++) {
+          const j = first + k, pos = j % cap, v = decT(tRaw[pos * tb], tb === 2 ? tRaw[pos * tb + 1] : 0);
+          const pt = { i: k + 1, t: (mission.startAt || 0) + j * mission.rateSec * 1000, v };
+          if (hRaw) {
+            // HIH-3610 sensor: Vout from the 10-bit reading, then temperature compensation (DS1923 datasheet)
+            const iv = (hRaw[pos * hb] << 2) | (hb === 2 ? hRaw[pos * hb + 1] >> 6 : 0), rh = ((iv * 5.02) / 1024 - 0.958) / 0.0307;
+            pt.h = Math.round(clamp(rh / (1.0546 - 0.00216 * v), 0, 100) * 10) / 10;
+          }
+          samples.push(pt);
+        }
+      }
+      let status = "idle";
+      if (mip) status = count === 0 ? "waiting" : count >= cap && !ro ? "full" : "running";
+      else if (count) status = count >= cap && !ro ? "full" : "done";
+      return { spec, capacity: cap, res: { status, samples, mission, clock: rtcRead(R, 0, true, false) } };
+    },
+    async stop(rd, rom) { await owCommand(rd, rom, [0x33, ...this.PW, 0xff]); },
+    async clear(rd, rom) {
+      const R = await this.regs(rd, rom); this.info(R);
+      if (R[0x15] & 2) await this.stop(rd, rom);
+      await owCommand(rd, rom, [0x96, ...this.PW, 0xff]);
+    },
+    async start(rd, rom, cfg) {
+      let R = await this.regs(rd, rom); const inf = this.info(R), spec = SPECS.find((s) => s.id === inf.id);
+      if (R[0x15] & 2) { await this.stop(rd, rom); R = await this.regs(rd, rom); }
+      const secs = cfg.rateSec % 60 !== 0, raw = secs ? cfg.rateSec : cfg.rateSec / 60;
+      if (raw < 1 || raw > 16383) throw new Error("Sample interval out of range for this logger.");
+      const encT = (t) => clamp(Math.round((t - inf.off) * 2), 0, 255), wide = cfg.res < 0.5, hum = !!spec.hasHum;
+      const clock = cfg.sync ? rtcBytes(Date.now(), false) : Array.from(R.subarray(0, 6));
+      await owWrite(rd, rom, 0x0200, [...clock, raw & 0xff, raw >> 8, encT(cfg.low), encT(cfg.high), R[0x0a], R[0x0b]], 0x99, this.PW);
+      await owWrite(rd, rom, 0x0210, [(cfg.alarmHigh ? 2 : 0) | (cfg.alarmLow ? 1 : 0), 0x00, 0x01 | (secs ? 2 : 0), 0x01 | (hum ? 0x02 : 0) | (wide ? 0x04 | (hum ? 0x08 : 0) : 0) | (cfg.rollover ? 0x10 : 0)], 0x99, this.PW);
+      const dm = Math.round(cfg.delaySec / 60);
+      await owWrite(rd, rom, 0x0216, [dm & 0xff, (dm >> 8) & 0xff, (dm >> 16) & 0xff], 0x99, this.PW);
+      await owCommand(rd, rom, [0x96, ...this.PW, 0xff]);
+      await owCommand(rd, rom, [0xcc, ...this.PW, 0xff]);
+      R = await this.regs(rd, rom);
+      if (!(R[0x15] & 2)) throw new Error("The logger did not start its mission.");
+    }
+  };
+
+  // DS1921G Thermochron (family 21h). Register page 0200h-021Fh, data log 1000h-17FFh, one byte per sample.
+  // DS1921H and DS1921Z share the family code; they are read here with DS1921G scaling.
+  const DS21 = {
+    async regs(rd, rom) { return owReadMem(rd, rom, 0xa5, [], 0x0200, 32); },
+    decT: (b) => b / 2 - 40,
+    async read(rd, rom, onPage) {
+      const R = await this.regs(rd, rom), spec = SPECS.find((s) => s.id === "DS1921G"), cap = 2048;
+      const ro = !!(R[0x0e] & 0x08), mip = !!(R[0x14] & 0x20), count = le(R, 0x1a, 3);
+      const mission = {
+        rateSec: (R[0x0d] || 1) * 60, res: 0.5, high: this.decT(R[0x0c]), low: this.decT(R[0x0b]), rollover: ro,
+        highOn: !!(R[0x0e] & 0x02), lowOn: !!(R[0x0e] & 0x04),
+        delaySec: le(R, 0x12, 2) * 60, startAt: rtcRead(R, 0x15, false, false), stopped: !mip && count > 0, stoppedAt: null, sync: null
+      };
+      const kept = Math.min(count, cap), wrapped = ro && count > cap, first = count - kept, samples = [];
+      if (kept) {
+        const raw = await owReadMem(rd, rom, 0xa5, [], 0x1000, wrapped ? cap : kept, onPage);
+        for (let k = 0; k < kept; k++) { const j = first + k; samples.push({ i: k + 1, t: (mission.startAt || 0) + j * mission.rateSec * 1000, v: this.decT(raw[j % cap]) }); }
+      }
+      let status = "idle";
+      if (mip) status = count === 0 ? "waiting" : count >= cap && !ro ? "full" : "running";
+      else if (count) status = count >= cap && !ro ? "full" : "done";
+      return { spec, capacity: cap, res: { status, samples, mission, clock: rtcRead(R, 0, true, true) } };
+    },
+    async stop(rd, rom) { const R = await this.regs(rd, rom); if (R[0x14] & 0x20) await owWrite(rd, rom, 0x0214, [R[0x14] & ~0x20], 0x55); },
+    async clear(rd, rom) {
+      await this.stop(rd, rom);
+      const R = await this.regs(rd, rom);
+      await owWrite(rd, rom, 0x020e, [(R[0x0e] | 0x40) & ~0x80], 0x55);
+      await owCommand(rd, rom, [0x3c]);
+    },
+    async start(rd, rom, cfg) {
+      if (cfg.rateSec % 60 || cfg.rateSec < 60 || cfg.rateSec > 255 * 60) throw new Error("The DS1921 samples every 1 to 255 minutes.");
+      await this.clear(rd, rom);
+      const R = await this.regs(rd, rom), encT = (t) => clamp(Math.round((t + 40) * 2), 0, 255), dm = Math.round(cfg.delaySec / 60);
+      if (dm > 65535) throw new Error("Start delay is too long for the DS1921 (max 65535 min).");
+      await owWrite(rd, rom, 0x0212, [dm & 0xff, dm >> 8], 0x55);
+      const clock = cfg.sync ? rtcBytes(Date.now(), true) : Array.from(R.subarray(0, 7));
+      // the mission starts as soon as a non-zero sample rate is written, so it goes last, together with the control register
+      await owWrite(rd, rom, 0x0200, [...clock, R[7], R[8], R[9], R[10], encT(cfg.low), encT(cfg.high), cfg.rateSec / 60, (R[0x0e] & 0x01) | (cfg.alarmHigh ? 0x02 : 0) | (cfg.alarmLow ? 0x04 : 0) | (cfg.rollover ? 0x08 : 0)], 0x55);
+      const A = await this.regs(rd, rom);
+      if (!(A[0x14] & 0x20)) throw new Error("The logger did not start its mission.");
+    }
+  };
+  // DS1925 (family 53h). Same register page layout as family 41h, but the clock and timestamps are 32-bit seconds since 1970,
+  // the log holds up to 125,440 bytes from 1000h, and memory and mission commands go through the External Power Command (XPC, 66h):
+  // command bytes, CRC16 back, release byte FFh with the bus held at 5 V while the iButton works, then a dummy byte and a result byte.
+  const XPC_ERR = { 0x22: "a mission is in progress", 0x44: "memory must be cleared first", 0x77: "invalid parameter (the sample interval must be at least 3 minutes)", 0x33: "invalid authorization", 0x11: "invalid password (password protection is enabled)", 0x00: "the log memory must be cleared first" };
+  async function xpcCmd(rd, romBus, sub, params, ms) {
+    const head = [0x66, 1 + params.length, sub, ...params];
+    await rd.select(romBus);
+    const c = await rd.block([...head, 0xff, 0xff]);
+    if ((c[head.length] | (c[head.length + 1] << 8)) !== (crc16(head) ^ 0xffff)) { await rd.reset(); throw new Error("The iButton did not acknowledge the command. Reseat it and try again."); }
+    await rd.byteSpu(0xff, ms);
+    const r = await rd.block([0xff, 0xff, 0xff]), code = Array.from(r).find((b) => b !== 0xff);
+    await rd.reset();
+    if (code !== 0xaa && code !== 0x55) throw new Error("The iButton refused the command: " + (XPC_ERR[code] || "result code " + hex(code == null ? 0xff : code) + "h") + ".");
+  }
+  // XPC Read Memory in page mode (TA2 bit 7); the data log is read in 64-byte blocks (TA2 bit 6)
+  async function xpcRead(rd, romBus, pw, addr, len, onPage) {
+    const log = addr >= 0x1000, bs = log ? 64 : 32, out = new Uint8Array(len), blocks = Math.ceil(len / bs);
+    let b = 0, tries = 0;
+    while (b < blocks) {
+      const ta = 0x8000 | (log ? 0x4000 : 0) | ((addr >> 5) + (b * bs) / 32), head = [0x66, 0x0b, 0x44, ta & 0xff, ta >> 8, ...pw];
+      await rd.select(romBus);
+      const c = await rd.block([...head, 0xff, 0xff]);
+      let ok = (c[13] | (c[14] << 8)) === (crc16(head) ^ 0xffff);
+      for (; ok && b < blocks; b++) {
+        await rd.byteSpu(0xff, 6);
+        const r = (await rd.block(new Array(bs + 3).fill(0xff))).subarray(1);
+        if ((r[bs] | (r[bs + 1] << 8)) !== (crc16(r.subarray(0, bs)) ^ 0xffff)) { ok = false; break; }
+        out.set(r.subarray(0, Math.min(bs, len - b * bs)), b * bs); tries = 0;
+        if (onPage) onPage(b + 1, blocks);
+      }
+      if (!ok && ++tries > 3) throw new Error("Data from the iButton failed the CRC check. Reseat it and try again.");
+    }
+    await rd.reset();
+    return out;
+  }
+  const DS53 = {
+    PW: new Array(8).fill(0), CAP: 125440, OFF: -41,
+    async regs(rd, rom) {
+      const R = await xpcRead(rd, rom, this.PW, 0x0200, 64);
+      if (R[0x26] !== 0xa0) throw new Error("Unknown family 53h device (configuration byte " + hex(R[0x26]) + "h).");
+      if (R[0x27] === 0xaa) throw new Error("This logger has password protection enabled, which this console does not support.");
+      return R;
+    },
+    info() { return { id: "DS1925" }; },
+    async read(rd, rom, onPage) {
+      const R = await this.regs(rd, rom), spec = SPECS.find((s) => s.id === "DS1925");
+      const tb = R[0x13] & 4 ? 2 : 1, mip = !!(R[0x15] & 2), count = le(R, 0x20, 3), cap = this.CAP / tb;
+      const secs = (o) => { const v = le(R, o, 4); return v && v !== 0xffffffff ? v * 1000 : null; };
+      const decT = (m, l) => m / 2 + this.OFF + (l >> 5) / 16;
+      const mission = {
+        rateSec: ((R[6] | ((R[7] & 0x3f) << 8)) || 1) * (R[0x12] & 2 ? 1 : 60), res: tb === 2 ? 0.0625 : 0.5, high: decT(R[9], 0), low: decT(R[8], 0), rollover: false,
+        highOn: !!(R[0x10] & 2), lowOn: !!(R[0x10] & 1),
+        delaySec: le(R, 0x16, 3) * 60, startAt: secs(0x19), stopped: !mip && count > 0, stoppedAt: null, sync: null
+      };
+      const kept = Math.min(count, cap), samples = [];
+      if (kept) {
+        const raw = await xpcRead(rd, rom, this.PW, 0x1000, kept * tb, onPage);
+        for (let k = 0; k < kept; k++) samples.push({ i: k + 1, t: (mission.startAt || 0) + k * mission.rateSec * 1000, v: decT(raw[k * tb], tb === 2 ? raw[k * tb + 1] : 0) });
+      }
+      let status = "idle";
+      if (mip) status = count === 0 ? "waiting" : count >= cap ? "full" : "running";
+      else if (count) status = count >= cap ? "full" : "done";
+      return { spec, capacity: cap, res: { status, samples, mission, clock: R[0x12] & 1 ? secs(0) : null } };
+    },
+    async stop(rd, rom) { const R = await this.regs(rd, rom); if (R[0x15] & 2) await xpcCmd(rd, rom, 0xbb, this.PW, 20); },
+    async clear(rd, rom) { await this.stop(rd, rom); await xpcCmd(rd, rom, 0x96, [0x01, ...this.PW], 1600); },
+    async start(rd, rom, cfg) {
+      if (cfg.rollover) throw new Error("The DS1925 cannot overwrite old samples. Turn off Overwrite oldest samples.");
+      if (cfg.rateSec < 180) throw new Error("The DS1925 samples at most every 3 minutes.");
+      const inMin = cfg.rateSec % 60 === 0, raw = inMin ? cfg.rateSec / 60 : cfg.rateSec;
+      if (raw > 16383) throw new Error("Sample interval out of range for this logger.");
+      const R0 = await this.regs(rd, rom);
+      await this.clear(rd, rom);
+      const now = cfg.sync || !le(R0, 0, 4) ? Math.floor(Date.now() / 1000) : le(R0, 0, 4), encT = (t) => clamp(Math.round(2 * t + 82), 0, 255), dm = Math.round(cfg.delaySec / 60);
+      const page = [now & 0xff, (now >> 8) & 0xff, (now >> 16) & 0xff, (now >>> 24) & 0xff, 0, 0, raw & 0xff, raw >> 8, encT(cfg.low), encT(cfg.high), 0x00, 0xff, 0xff, 0xff, 0xff, 0xff,
+        (cfg.alarmHigh ? 2 : 0) | (cfg.alarmLow ? 1 : 0), 0xfc, 0x01 | (inMin ? 0 : 2), 0xc1 | (cfg.res < 0.5 ? 0x04 : 0), 0xff, 0xff, dm & 0xff, (dm >> 8) & 0xff, (dm >> 16) & 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+      // clearing the log stopped the clock; the copy that turns it back on needs the extra start-up time tSRTC
+      const auth = await owScratch(rd, rom, 0x0200, page);
+      await xpcCmd(rd, rom, 0x99, [...auth, ...this.PW], 2020);
+      await xpcCmd(rd, rom, 0xdd, this.PW, 2020);
+      const R = await this.regs(rd, rom);
+      if (!(R[0x15] & 2)) throw new Error("The logger did not start its mission.");
+    }
+  };
+  const LOGGERS = { 0x21: DS21, 0x41: DS41, 0x53: DS53 };
+
+  // a logger on the reader, with the same read/start/stop/clear interface as the demo device
+  function makeUsbDevice(rd, romBus, info) {
+    const drv = LOGGERS[romBus[0]], rom = busToRom(romBus);
+    return {
+      kind: "usb", rom, romBus, model: info.spec.name, family: hex(romBus[0]) + "h", spec: info.spec, capacity: info.capacity,
+      async read() {
+        return rd.lock(async () => {
+          const r = await drv.read(rd, romBus, this.onPage);
+          this.spec = r.spec; this.model = r.spec.name; this.capacity = r.capacity;
+          return r.res;
+        });
+      },
+      start(cfg) { return rd.lock(() => drv.start(rd, romBus, cfg)); },
+      stop() { return rd.lock(() => drv.stop(rd, romBus)); },
+      clear() { return rd.lock(() => drv.clear(rd, romBus)); }
+    };
+  }
+  // find the first supported logger on the bus and identify its model
+  async function findLogger(rd) {
+    const roms = await rd.lock(() => rd.search());
+    if (!roms.length) return { roms, dev: null };
+    const romBus = roms.find((r) => LOGGERS[r[0]]);
+    if (!romBus) return { roms, dev: null };
+    const drv = LOGGERS[romBus[0]];
+    const id = romBus[0] === 0x21 ? "DS1921G" : drv.info(await rd.lock(() => drv.regs(rd, romBus))).id, spec = SPECS.find((s) => s.id === id);
+    const info = { spec, capacity: spec.resOpts[0].cap };
+    return { roms, dev: makeUsbDevice(rd, romBus, info) };
+  }
+
+  function releaseReader() { if (state.reader) { state.reader.close().catch(() => {}); log("USB reader released."); } state.reader = null; }
+
+  /* ---------- UI state ---------- */
+  function setConn(text, cls) { $("connText").textContent = text; $("connDot").className = "dot " + (cls || ""); }
+  function pillSet(text, cls) { const p = $("missionPill"); p.textContent = text; p.className = "pill " + cls; }
+
+  const sheetUrl = (spec) => "https://www.analog.com/en/products/" + spec.id.toLowerCase() + ".html";
+  // model name in the Device box, linked to the datasheet when the model is a known one
+  function setModel(name) {
+    const el = $("dModel"), spec = SPECS.find((s) => String(name || "").indexOf(s.id) >= 0);
+    el.textContent = "";
+    if (!spec) { el.textContent = name || "n/a"; return; }
+    const a = document.createElement("a"); a.href = sheetUrl(spec); a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = name; a.title = spec.id + " datasheet";
+    el.appendChild(a);
+  }
+
+  function refreshChrome() {
+    const d = state.device, demo = state.demo, file = !!state.file;
+    $("btnConnect").disabled = demo || !!state.reader;
+    $("btnDisconnect").disabled = demo || !(state.reader || file);
+    $("demoBanner").hidden = !demo;
+    $("readerNote").hidden = demo;
+    $("readerNote").textContent = state.busyText || (file ? "Showing " + state.file + ". Read-only: press Disconnect to close the file." : state.reader ? "USB reader attached: " + (state.reader.productName || "DS9490R") + "." + (d ? "" : " Put an iButton logger in the reader and press Read device.") : "Plug in the USB reader, then press Connect reader.");
+    const ready = !!d, live = ready && !file && !state.busy;
+    ["btnRead", "btnStart", "btnStop", "btnClear"].forEach((id) => ($(id).disabled = !live));
+    if (!demo && state.reader && !file && !state.busy) $("btnRead").disabled = false;
+    if (demo) setConn("Demo reader, 1 iButton", "ok");
+    else if (file) setConn(state.sourceKind === "history" ? state.file : "CSV file: " + state.file, "warn");
+    else if (state.reader) setConn(d ? "Reader connected, " + d.model.split(" ")[0] + " " + d.rom : "Reader connected, no logger found", d ? "ok" : "warn");
+    else setConn("Not connected", "");
+    if (!ready) {
+      $("romId").textContent = "n/a";
+      ["dModel", "dFamily", "dMem", "dUsed", "dFree", "dRate", "dHigh", "dLow", "dRes", "dDelay", "dSync", "dRoll", "dMax", "dStart", "dDur", "dLast", "dClock"].forEach((k) => ($(k).textContent = "n/a"));
+      pillSet("No device", "idle");
+    } else {
+      $("romId").textContent = d.rom;
+      setModel(d.model); $("dFamily").textContent = d.family;
+      $("dMem").textContent = d.capacity.toLocaleString() + " samples";
+    }
+    renderSource();
+  }
+
+  function renderSource() {
+    const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const rows = [], d = state.device, n = state.data ? state.data.samples.length : 0;
+    const add = (k, v, mono) => rows.push("<dt>" + k + "</dt><dd" + (mono ? ' class="mono"' : "") + ">" + esc(v) + "</dd>");
+    let pill = ["None", "idle"];
+    if (state.file && state.sourceKind === "history") {
+      const hi = state.historyInfo || {};
+      pill = ["History", "done"];
+      add("Source", "Saved read from history");
+      add("Device ID", d ? d.rom : "n/a", true);
+      if (state.readAt) add("Read from iButton", fmtTime(state.readAt), true);
+      if (hi.savedAt) add("Saved", fmtTime(hi.savedAt), true);
+      add("Samples", n.toLocaleString(), true);
+      if (hi.demo) add("Data", "Simulated (demo mode)");
+    } else if (state.file) {
+      const fi = state.fileInfo || {};
+      pill = ["CSV file", "done"];
+      add("Source", "CSV file, read-only");
+      add("File name", state.file);
+      add("File created", fi.created ? fmtTime(fi.created) : "Not stored in this file", !!fi.created);
+      if (fi.modified) add("File modified", fmtTime(fi.modified), true);
+      if (state.lastRead) add("Opened", fmtTime(state.lastRead), true);
+      if (fi.size != null) add("File size", fi.size >= 1024 ? (fi.size / 1024).toFixed(1) + " KB" : fi.size + " B", true);
+    } else if (state.demo) {
+      pill = ["Demo", "err"];
+      add("Source", "Simulated reader and logger");
+      add("Hardware", "None, generated data");
+      if (d) add("Device ID", d.rom, true);
+      add("Samples", n.toLocaleString(), true);
+      if (state.lastRead) add("Last update", fmtTime(state.lastRead), true);
+    } else if (d) {
+      pill = ["Hardware", "run"];
+      add("Source", "Logger read through the USB reader");
+      add("Reader", state.reader ? (state.reader.productName || "DS9490R") : "n/a");
+      add("Device ID", d.rom, true);
+      add("Samples", n.toLocaleString(), true);
+      if (state.lastRead) add("Last read", fmtTime(state.lastRead), true);
+    } else if (state.reader) {
+      pill = ["Reader only", "idle"];
+      add("Source", "USB reader connected");
+      add("Reader", state.reader.productName || "DS9490R");
+      add("Data", "No logger read yet");
+    } else {
+      add("Source", "No data loaded");
+      add("Next step", "Turn on Demo mode, connect a reader, or open a CSV file");
+    }
+    $("srcPill").textContent = pill[0]; $("srcPill").className = "pill " + pill[1];
+    const half = Math.ceil(rows.length / 2);
+    $("srcList").innerHTML = '<dl class="kv">' + rows.slice(0, half).join("") + '</dl><dl class="kv">' + rows.slice(half).join("") + "</dl>";
+  }
+
+  function applyData(res) {
+    state.data = res; state.lastRead = Date.now(); if (!state.file) state.readAt = Date.now();
+    const m = res.mission;
+    const map = { idle: ["Idle", "idle"], running: ["Mission running", "run"], waiting: ["Waiting for start", "run"], done: ["Mission stopped", "done"], file: ["CSV file", "done"], history: ["Saved read", "done"], full: ["Memory full", "err"] };
+    const p = map[res.status] || map.idle; pillSet(p[0], p[1]);
+    $("dStart").textContent = m ? (m.startAt ? fmtTime(m.startAt) : res.status === "waiting" ? "Waiting for first sample" : "Not started") : "n/a";
+    $("dRate").textContent = m ? fmtRate(m.rateSec) : "n/a";
+    $("dHigh").textContent = m ? (m.highOn === false ? "Off" : m.high.toFixed(1) + " °C") : "n/a";
+    $("dLow").textContent = m ? (m.lowOn === false ? "Off" : m.low.toFixed(1) + " °C") : "n/a";
+    $("dRes").textContent = m ? m.res + " °C (" + optFor(m.res, specNow()).bits + " bit)" : "n/a";
+    $("dDelay").textContent = m ? Math.round((m.delaySec || 0) / 60) + " min" : "n/a";
+    $("dSync").textContent = m ? (m.sync == null ? "Not recorded by the logger" : m.sync ? "Yes" : "No") : "n/a";
+    $("dRoll").textContent = m ? (m.rollover ? "Yes" : "No") : "n/a";
+    $("dMax").textContent = m ? (m.rollover ? "Unlimited" : fmtLong(capFor(m.res, specNow()) * m.rateSec)) : "n/a";
+    const cap = state.device ? state.device.capacity : DEFAULT_SPEC.resOpts[0].cap, used = Math.min(res.samples.length, cap), free = cap - used;
+    $("dUsed").textContent = used.toLocaleString() + " (" + ((100 * used) / cap).toFixed(1) + "%)";
+    $("dFree").textContent = free.toLocaleString() + " (" + ((100 * free) / cap).toFixed(1) + "%)";
+    $("dMem").textContent = cap.toLocaleString() + " samples";
+    $("dDur").textContent = res.samples.length && m ? fmtLong(Math.max(0, (res.samples[res.samples.length - 1].t - m.startAt) / 1000)) : "n/a";
+    $("dLast").textContent = res.samples.length ? fmtTime(res.samples[res.samples.length - 1].t) : "n/a";
+    $("dClock").textContent = res.clock ? fmtTime(res.clock) : "n/a";
+    renderAll(); renderSource();
+  }
+
+  /* ---------- thresholds (shared by chart, summary, table, mission setup) ---------- */
+  // hi and lo are the limits in effect: +Infinity / -Infinity when that alarm is turned off
+  function thr() {
+    const fb = (state.data && state.data.mission) || { high: 30, low: 25 };
+    const h = parseFloat($("cfgHigh").value), l = parseFloat($("cfgLow").value), hiOn = $("cfgHighOn").checked, loOn = $("cfgLowOn").checked;
+    const high = isFinite(h) ? h : fb.high, low = isFinite(l) ? l : fb.low;
+    return { high, low, hiOn, loOn, hi: hiOn ? high : Infinity, lo: loOn ? low : -Infinity };
+  }
+  function setThr(which, v) { $(which === "high" ? "cfgHigh" : "cfgLow").value = +v.toFixed(2); }
+  function syncAlarmInputs() { $("cfgHigh").disabled = !$("cfgHighOn").checked; $("cfgLow").disabled = !$("cfgLowOn").checked; }
+  // thresholds and on/off state from a mission (older saved reads have no on/off fields: alarms on)
+  function setAlarms(m) {
+    setThr("high", m.high); setThr("low", m.low);
+    $("cfgHighOn").checked = m.highOn !== false; $("cfgLowOn").checked = m.lowOn !== false; syncAlarmInputs();
+  }
+  const alarmText = (c) => (c.alarmHigh && c.alarmLow ? "alarms " + c.low + " to " + c.high + " °C" : c.alarmHigh ? "high alarm " + c.high + " °C, low alarm off" : c.alarmLow ? "low alarm " + c.low + " °C, high alarm off" : "alarms off");
+  ["cfgHighOn", "cfgLowOn"].forEach((id) => $(id).addEventListener("change", () => { syncAlarmInputs(); if (state.data) renderAll(); }));
+  syncAlarmInputs();
+
+  /* ---------- stats ---------- */
+  function pctl(sorted, p) { const i = (sorted.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo); }
+  function computeStats(s0, t, key) {
+    key = key || "v";
+    const s = s0.filter((p) => p[key] != null);
+    if (!s.length) return null;
+    let min = s[0], max = s[0], sum = 0, hi = 0, lo = 0;
+    const vals = new Float64Array(s.length);
+    s.forEach((p, i) => { const v = p[key]; vals[i] = v; if (v < min[key]) min = p; if (v > max[key]) max = p; sum += v; if (t) { if (v > t.hi) hi++; if (v < t.lo) lo++; } });
+    const n = s.length, mean = sum / n;
+    let ss = 0; for (let i = 0; i < n; i++) ss += (vals[i] - mean) * (vals[i] - mean);
+    const sorted = vals.slice().sort();
+    return { key, min: { t: min.t, v: min[key] }, max: { t: max.t, v: max[key] }, mean, hi, lo, n, sd: n > 1 ? Math.sqrt(ss / (n - 1)) : 0, median: pctl(sorted, 0.5), p5: pctl(sorted, 0.05), p95: pctl(sorted, 0.95), vals };
+  }
+
+  /* ---------- what to show: temperature, humidity or both ---------- */
+  const hasHum = () => { const s = state.data && state.data.samples; return !!(s && s.length && s[0].h != null); };
+  const effView = (k) => (hasHum() ? state.view[k] : "temp");
+  function updateSeg() {
+    const ok = hasHum();
+    [["chart", "viewChart"], ["stats", "viewStats"]].forEach(([k, id]) => {
+      const cur = effView(k);
+      $(id).hidden = !ok; // with only temperature to show there is nothing to choose
+      $(id).querySelectorAll("button").forEach((b) => {
+        const v = b.dataset.v; b.setAttribute("aria-pressed", String(v === cur));
+        b.disabled = !ok && v !== "temp"; b.title = b.disabled ? "This data has no humidity readings" : "";
+      });
+    });
+  }
+  [["chart", "viewChart", () => renderChart()], ["stats", "viewStats", () => renderStats()]].forEach(([k, id, fn]) => {
+    $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b || b.disabled) return; state.view[k] = b.dataset.v; updateSeg(); fn(); });
+  });
+
+  function renderStats() {
+    const el = $("stats"), r = state.data, h2 = $("hist2");
+    updateSeg();
+    if (!r || !r.samples.length) { el.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:12px">No samples yet.</div>'; h2.hidden = true; renderHistogram($("hist"), null, null); return; }
+    const th = thr(), rate = r.mission.rateSec, s = r.samples, v = effView("stats");
+    const stT = v !== "hum" ? computeStats(s, th, "v") : null, stH = v !== "temp" ? computeStats(s, null, "h") : null;
+    const tile = (k, val, sub, cls) => '<div class="stat ' + (cls || "") + '"><div class="k">' + k + '</div><div class="v num">' + val + '</div><div class="s">' + sub + "</div></div>";
+    const core = (st, u) => { const f = (x) => x.toFixed(1) + " " + u; return (
+      tile("Minimum", f(st.min.v), fmtTime(st.min.t), "cold") + tile("Maximum", f(st.max.v), fmtTime(st.max.t), "hot") +
+      tile("Mean", f(st.mean), "arithmetic mean") + tile("Median", f(st.median), "50th percentile") +
+      tile("Std deviation", st.sd.toFixed(1) + " " + u, "sample, n-1") + tile("Range", f(st.max.v - st.min.v), "max minus min") +
+      tile("5th percentile", f(st.p5), "5% of samples below") + tile("95th percentile", f(st.p95), "5% of samples above")); };
+    const extra = (st) => tile("Duration", fmtDur(Math.round((s[s.length - 1].t - s[0].t) / 1000)), "first to last sample") + tile("Samples", st.n.toLocaleString(), "every " + fmtRate(rate));
+    let html = "";
+    if (stT) html += (v === "both" ? '<div class="statgroup">Temperature</div>' : "") + core(stT, "°C") +
+      (th.hiOn ? tile("Above " + th.high + " °C", stT.hi ? fmtDur(stT.hi * rate) : "none", stT.hi + " samples", stT.hi ? "hot" : "") : "") +
+      (th.loOn ? tile("Below " + th.low + " °C", stT.lo ? fmtDur(stT.lo * rate) : "none", stT.lo + " samples", stT.lo ? "cold" : "") : "") + extra(stT);
+    if (stH) html += (v === "both" ? '<div class="statgroup">Relative humidity</div>' : "") + core(stH, "%RH") + (v === "hum" ? extra(stH) : "");
+    el.innerHTML = html;
+    renderHistogram($("hist"), v === "hum" ? stH : stT, v === "hum" ? null : th);
+    h2.hidden = v !== "both";
+    if (v === "both") renderHistogram(h2, stH, null);
+  }
+
+  function renderHistogram(svg, st, th) {
+    const hum = !!(st && st.key === "h"), unit = hum ? "%RH" : "°C", W2 = 860, H2 = 300, m = { l: 78, r: 16, t: 16, b: 66 };
+    if (!st) { svg.innerHTML = '<text x="' + W2 / 2 + '" y="' + H2 / 2 + '" text-anchor="middle">No data to plot</text>'; return; }
+    const bw = niceStep(st.max.v - st.min.v || 1, 18);
+    const b0 = Math.floor(st.min.v / bw) * bw, b1 = Math.max(Math.ceil((st.max.v + 1e-9) / bw) * bw, b0 + bw);
+    const nb = Math.round((b1 - b0) / bw), counts = new Array(nb).fill(0);
+    for (const v of st.vals) counts[Math.min(nb - 1, Math.floor((v - b0) / bw))]++;
+    const dlo = th && th.loOn ? Math.min(b0, th.low - bw) : b0, dhi = th && th.hiOn ? Math.max(b1, th.high + bw) : b1;
+    const cmax = Math.max(...counts), cstep = niceStep(cmax, 3), ctop = Math.ceil(cmax / cstep) * cstep;
+    const x = (v) => m.l + ((v - dlo) / (dhi - dlo)) * (W2 - m.l - m.r);
+    const y = (c) => H2 - m.b - (c / ctop) * (H2 - m.t - m.b);
+    let out = "";
+    for (let c = 0; c <= ctop + 1e-9; c += cstep) out += '<line x1="' + m.l + '" x2="' + (W2 - m.r) + '" y1="' + y(c) + '" y2="' + y(c) + '" stroke="var(--grid)"/><text x="' + (m.l - 6) + '" y="' + (y(c) + 4) + '" text-anchor="end">' + c + "</text>";
+    const xs = niceStep(dhi - dlo, 8);
+    for (let v = Math.ceil(dlo / xs) * xs; v <= dhi + 1e-9; v += xs) out += '<text x="' + x(v) + '" y="' + (H2 - m.b + 25) + '" text-anchor="middle">' + +v.toFixed(2) + "</text>";
+    counts.forEach((c, i) => {
+      if (!c) return;
+      const v0 = b0 + i * bw, mid = v0 + bw / 2, color = hum ? "var(--hum)" : mid > th.hi ? "var(--hot)" : mid < th.lo ? "var(--cold)" : "var(--accent)";
+      const w = Math.max(1, x(v0 + bw) - x(v0) - 1.5);
+      out += '<rect x="' + x(v0) + '" y="' + y(c) + '" width="' + w + '" height="' + (y(0) - y(c)) + '" fill="' + color + '" fill-opacity="0.85"><title>' + +v0.toFixed(2) + " to " + +(v0 + bw).toFixed(2) + " " + unit + ": " + c + " samples (" + ((100 * c) / st.n).toFixed(1) + "%)</title></rect>";
+    });
+    if (th && th.hiOn) out += '<line x1="' + x(th.high) + '" x2="' + x(th.high) + '" y1="' + m.t + '" y2="' + y(0) + '" stroke="var(--hot)" stroke-dasharray="5 4"/>';
+    if (th && th.loOn) out += '<line x1="' + x(th.low) + '" x2="' + x(th.low) + '" y1="' + m.t + '" y2="' + y(0) + '" stroke="var(--cold)" stroke-dasharray="5 4"/>';
+    out += '<line x1="' + x(st.mean) + '" x2="' + x(st.mean) + '" y1="' + m.t + '" y2="' + y(0) + '" stroke="var(--fg)" stroke-opacity="0.55"/><text x="' + (x(st.mean) + 5) + '" y="' + (m.t + 15) + '">mean</text>';
+    out += '<text class="axt" transform="rotate(-90)" x="' + (-(m.t + (H2 - m.t - m.b) / 2)) + '" y="20" text-anchor="middle">Number of Samples [#]</text>';
+    out += '<text class="axt" x="' + (m.l + (W2 - m.l - m.r) / 2) + '" y="' + (H2 - 8) + '" text-anchor="middle">' + (hum ? "Relative humidity (%RH)" : "Temperature (°C)") + "</text>";
+    svg.innerHTML = out;
+  }
+
+  /* ---------- chart ---------- */
+  const W = 860, H = 377, M = { l: 78, r: 16, t: 16, b: 88 };
+  let chartGeom = null;
+  function niceStep(span, n) { const raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+  function renderChart() {
+    const svg = $("chart"), r = state.data;
+    updateSeg();
+    if (!r || r.samples.length < 2) {
+      svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" text-anchor="middle">No data to plot</text>'; chartGeom = null; return;
+    }
+    const s = r.samples, m = thr(), mode = effView("chart"), showT = mode !== "hum", showH = mode !== "temp";
+    M.r = mode === "both" ? 80 : 16;
+    const scale = (key, ext) => {
+      let lo = Infinity, hi = -Infinity;
+      for (const p of s) { const v = p[key]; if (v == null) continue; if (v < lo) lo = v; if (v > hi) hi = v; }
+      if (ext) for (const e of ext) if (isFinite(e)) { lo = Math.min(lo, e); hi = Math.max(hi, e); } // a disabled alarm is ±Infinity: leave it out of the range
+      const step = niceStep(hi - lo || 1, 5); lo = Math.floor((lo - step * 0.3) / step) * step; hi = Math.ceil((hi + step * 0.3) / step) * step;
+      if (key === "h") { lo = Math.max(0, lo); hi = Math.min(100, hi); if (hi <= lo) hi = lo + step; }
+      return { lo, hi, step };
+    };
+    const ST = showT ? scale("v", [m.lo, m.hi]) : null, SH = showH ? scale("h") : null, P = ST || SH;
+    const mk = (S) => (v) => H - M.b - ((v - S.lo) / (S.hi - S.lo)) * (H - M.t - M.b);
+    const yT = ST ? mk(ST) : null, yH = SH ? mk(SH) : null, y = yT || yH, lo = P.lo, hi = P.hi, step = P.step, key = ST ? "v" : "h";
+    const t0 = s[0].t, t1 = s[s.length - 1].t;
+    const x = (t) => M.l + ((t - t0) / (t1 - t0)) * (W - M.l - M.r);
+    let out = "";
+    for (let v = lo; v <= hi + 1e-9; v += step) out += '<line x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--grid)"/><text x="' + (M.l - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + +v.toFixed(2) + "</text>";
+    if (mode === "both") for (let v = SH.lo; v <= SH.hi + 1e-9; v += SH.step) out += '<text x="' + (W - M.r + 8) + '" y="' + (yH(v) + 4) + '" text-anchor="start" style="fill:var(--hum)">' + +v.toFixed(2) + "</text>";
+    const nx = 5, MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let prevDay = "", prevYear = 0;
+    const ld = new Date(t1), lastKey = ld.getFullYear() + "-" + ld.getMonth() + "-" + ld.getDate();
+    for (let i = 0; i <= nx; i++) {
+      const t = t0 + ((t1 - t0) * i) / nx, d = new Date(t), span = t1 - t0;
+      const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + (span < 3600000 ? ":" + pad(d.getSeconds()) : "");
+      const dayKey = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(), mon = MONTHS[d.getMonth()] + (d.getFullYear() !== prevYear ? " " + d.getFullYear() : "");
+      const edge = i === 0 || i === nx, date = edge ? d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear() : dayKey !== prevDay && !(i === nx - 1 && dayKey === lastKey) ? d.getDate() + " " + mon : "";
+      prevDay = dayKey; prevYear = d.getFullYear();
+      const anchor = i === 0 ? "start" : i === nx ? "end" : "middle";
+      out += '<text x="' + x(t) + '" y="' + (H - M.b + 25) + '" text-anchor="' + anchor + '">' + time + "</text>";
+      if (date) out += '<text x="' + x(t) + '" y="' + (H - M.b + 46) + '" text-anchor="' + anchor + '">' + date + "</text>";
+    }
+    const tl = (id, cls, val, color, name, dy) => {
+      const yy = y(val);
+      return '<line class="hit" id="hit' + id + '" tabindex="0" role="slider" aria-label="' + name + ' alarm threshold, drag or use arrow keys" aria-valuenow="' + val + '" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + yy + '" y2="' + yy + '" stroke="transparent" stroke-width="16"/>' +
+        '<line class="thr" id="thr' + id + '" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + color + '" stroke-width="1.6" stroke-dasharray="5 4"/>' +
+        '<text id="lbl' + id + '" x="' + (W - M.r - 4) + '" y="' + (yy + dy) + '" text-anchor="end" style="fill:' + color + '">' + name + " " + val.toFixed(1) + " °C</text>";
+    };
+    const cy = M.t + (H - M.t - M.b) / 2, colT = mode === "both" ? "var(--accent)" : "var(--fg)";
+    out += '<text class="axt" transform="rotate(-90)" x="' + (-cy) + '" y="20" text-anchor="middle" style="fill:' + (showT ? colT : "var(--hum)") + '">' + (showT ? "Temperature (°C)" : "Relative humidity (%RH)") + "</text>";
+    if (mode === "both") out += '<text class="axt" transform="rotate(90)" x="' + cy + '" y="' + (-(W - 20)) + '" text-anchor="middle" style="fill:var(--hum)">Relative humidity (%RH)</text>';
+    out += '<text class="axt" x="' + (M.l + (W - M.l - M.r) / 2) + '" y="' + (H - 8) + '" text-anchor="middle">Time</text>';
+    const stepN = Math.max(1, Math.ceil(s.length / 1200)), last = s[s.length - 1];
+    const series = (k, yy, color, area, S) => {
+      let pts = ""; for (let i = 0; i < s.length; i += stepN) if (s[i][k] != null) pts += x(s[i].t).toFixed(1) + "," + yy(s[i][k]).toFixed(1) + " ";
+      if (!pts) return "";
+      let o = ""; const base = yy(S.lo);
+      if (area) o += '<polygon points="' + x(t0) + "," + base + " " + pts + x(t1) + "," + base + '" fill="' + color + '" fill-opacity="0.10"/>';
+      o += '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.6" stroke-linejoin="round"/>';
+      if (last[k] != null) o += '<circle cx="' + x(last.t) + '" cy="' + yy(last[k]) + '" r="3.5" fill="' + color + '"/>';
+      return o;
+    };
+    if (showH) out += series("h", yH, "var(--hum)", mode === "hum", SH);
+    if (showT) out += series("v", yT, "var(--accent)", true, ST);
+    if (showT && m.hiOn) out += tl("High", "hi", m.high, "var(--hot)", "High", -6);
+    if (showT && m.loOn) out += tl("Low", "lo", m.low, "var(--cold)", "Low", 20);
+    out += '<line id="cross" y1="' + M.t + '" y2="' + (H - M.b) + '" stroke="var(--fg)" stroke-opacity="0.4" visibility="hidden"/><circle id="crossDot" r="4" fill="var(--panel)" stroke="' + (showT ? "var(--accent)" : "var(--hum)") + '" stroke-width="2" visibility="hidden"/>' + (mode === "both" ? '<circle id="crossDot2" r="4" fill="var(--panel)" stroke="var(--hum)" stroke-width="2" visibility="hidden"/>' : "");
+    svg.innerHTML = out;
+    chartGeom = { x, y, yH, key, mode, t0, t1, s, lo, hi, step };
+  }
+  let drag = null, dragRaf = 0;
+  function moveLine(which, v) {
+    const g = chartGeom, id = which === "high" ? "High" : "Low", yy = g.y(v);
+    ["hit", "thr"].forEach((k) => { const el = $(k + id); el.setAttribute("y1", yy); el.setAttribute("y2", yy); });
+    const lb = $("lbl" + id); lb.setAttribute("y", yy + (which === "high" ? -6 : 20)); lb.textContent = (which === "high" ? "High " : "Low ") + v.toFixed(1) + " °C";
+  }
+  $("chart").addEventListener("pointerdown", (e) => {
+    const c = e.target.classList; if (!chartGeom || !c || !c.contains("hit")) return;
+    drag = e.target.id === "hitHigh" ? "high" : "low";
+    try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
+    e.preventDefault(); $("readout").hidden = true;
+  });
+  function endDrag() { if (!drag) return; drag = null; cancelAnimationFrame(dragRaf); renderAll(); }
+  $("chart").addEventListener("pointerup", endDrag);
+  $("chart").addEventListener("pointercancel", endDrag);
+  $("chart").addEventListener("keydown", (e) => {
+    const id = e.target.id; if (id !== "hitHigh" && id !== "hitLow") return;
+    const dir = e.key === "ArrowUp" ? 1 : e.key === "ArrowDown" ? -1 : 0; if (!dir) return;
+    e.preventDefault();
+    const which = id === "hitHigh" ? "high" : "low", t = thr(), d = (e.shiftKey ? 0.1 : 0.5) * dir;
+    let v = (which === "high" ? t.high : t.low) + d;
+    v = which === "high" ? Math.max(v, t.lo + 0.1) : Math.min(v, t.hi - 0.1);
+    setThr(which, v); renderAll(); const el = $(id); if (el) el.focus();
+  });
+  $("chart").addEventListener("pointermove", (e) => {
+    if (!chartGeom) return;
+    if (drag) {
+      const g = chartGeom, rect = $("chart").getBoundingClientRect();
+      const sy = ((e.clientY - rect.top) / rect.height) * H;
+      let v = g.lo + ((H - M.b - sy) / (H - M.t - M.b)) * (g.hi - g.lo);
+      v = Math.round(v * 2) / 2;
+      const t = thr();
+      v = drag === "high" ? Math.min(g.hi, Math.max(v, t.lo + 0.5)) : Math.max(g.lo, Math.min(v, t.hi - 0.5));
+      setThr(drag, v); moveLine(drag, v);
+      if (!dragRaf) dragRaf = requestAnimationFrame(() => { dragRaf = 0; renderStats(); });
+      return;
+    }
+    const svg = $("chart"), rect = svg.getBoundingClientRect(), px = ((e.clientX - rect.left) / rect.width) * W;
+    const { t0, t1, s, x, y, yH, key, mode } = chartGeom;
+    const t = t0 + ((px - M.l) / (W - M.l - M.r)) * (t1 - t0);
+    let a = 0, b = s.length - 1;
+    while (b - a > 1) { const mid = (a + b) >> 1; if (s[mid].t < t) a = mid; else b = mid; }
+    const p = Math.abs(s[a].t - t) < Math.abs(s[b].t - t) ? s[a] : s[b];
+    const c = $("cross"), d = $("crossDot"); if (!c) return;
+    c.setAttribute("x1", x(p.t)); c.setAttribute("x2", x(p.t)); c.setAttribute("visibility", "visible");
+    d.setAttribute("cx", x(p.t)); d.setAttribute("cy", y(p[key])); d.setAttribute("visibility", "visible");
+    const d2 = $("crossDot2"); if (d2 && p.h != null) { d2.setAttribute("cx", x(p.t)); d2.setAttribute("cy", yH(p.h)); d2.setAttribute("visibility", "visible"); }
+    const ro = $("readout"); ro.hidden = false; ro.textContent = fmtTime(p.t) + (mode !== "hum" ? "   " + p.v.toFixed(2) + " °C" : "") + (mode !== "temp" && p.h != null ? "   " + p.h.toFixed(1) + " %RH" : "");
+  });
+  $("chart").addEventListener("pointerleave", () => { $("readout").hidden = true; const c = $("cross"), d = $("crossDot"), d2 = $("crossDot2"); if (c) { c.setAttribute("visibility", "hidden"); d.setAttribute("visibility", "hidden"); if (d2) d2.setAttribute("visibility", "hidden"); } });
+
+  /* ---------- table + export ---------- */
+  const ROW_CAP = 1000;
+  // Table columns can be reordered by dragging the headers; the order is kept per column layout.
+  let colDrag = false;
+  function orderCols(cols, sig) {
+    const keys = cols.map((c) => c.k), saved = state.colOrder && state.colOrder.sig === sig ? state.colOrder.keys : [];
+    const order = saved.filter((k) => keys.indexOf(k) >= 0); keys.forEach((k) => { if (order.indexOf(k) < 0) order.push(k); });
+    return order.map((k) => cols.find((c) => c.k === k));
+  }
+  function renderTable() {
+    if (colDrag) return;
+    const r = state.data, tb = $("rows");
+    if (!r || !r.samples.length) { tb.innerHTML = ""; $("tableNote").textContent = "No samples to show."; $("btnCopy").disabled = $("btnCsv").disabled = true; setDragOk(false); return; }
+    $("btnCopy").disabled = $("btnCsv").disabled = false; setDragOk(true);
+    const s = r.samples, m = thr(), from = Math.max(0, s.length - ROW_CAP);
+    const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const flagOf = (p) => (p.v > m.hi ? "HIGH" : p.v < m.lo ? "LOW" : "");
+    let cols, sig, note;
+    if (state.sourceKind === "file" && state.csvHead && s[0].raw) {
+      // a CSV file shows every column it has
+      let nc = state.csvHead.length; for (const p of s.slice(0, 50)) nc = Math.max(nc, p.raw.length);
+      const heads = Array.from({ length: nc }, (_, k) => state.csvHead[k] || "column " + (k + 1));
+      cols = heads.map((h, k) => ({ k: "c" + k, label: h, cell: (p) => { const c = p.raw[k] == null ? "" : p.raw[k]; return [esc(c), c !== "" && isFinite(c)]; } }));
+      sig = "csv|" + heads.join("|");
+      note = (s.length > ROW_CAP ? "Showing the newest " + ROW_CAP + " of " + s.length.toLocaleString() + " samples. " : s.length.toLocaleString() + " samples, ") + nc + " columns from the file, newest first.";
+      $("tbl").classList.add("wide");
+    } else {
+      cols = [{ k: "n", label: "#", cell: (p) => [p.i, true] }, { k: "time", label: "Time", cell: (p) => [fmtTime(p.t), true] }, { k: "temp", label: "Temp (°C)", cell: (p) => [p.v.toFixed(2), true] }];
+      if (hasHum()) cols.push({ k: "hum", label: "Humidity (%RH)", cell: (p) => [p.h != null ? p.h.toFixed(1) : "", true] });
+      sig = "std|" + cols.map((c) => c.k).join("|");
+      note = s.length > ROW_CAP ? "Showing the newest " + ROW_CAP + " of " + s.length.toLocaleString() + " samples. Export includes all." : s.length.toLocaleString() + " samples, newest first.";
+      $("tbl").classList.remove("wide");
+    }
+    cols.push({ k: "alarm", label: "Alarm", cell: (p) => [flagOf(p), false] });
+    const ordered = orderCols(cols, sig);
+    state.colSig = sig; state.colKeys = ordered.map((c) => c.k);
+    $("thead").innerHTML = "<tr>" + ordered.map((c) => '<th draggable="true" class="colh" data-k="' + c.k + '" title="Drag to reorder">' + esc(c.label) + "</th>").join("") + "</tr>";
+    const parts = [];
+    for (let i = s.length - 1; i >= from; i--) {
+      const p = s[i], f = flagOf(p);
+      parts.push('<tr class="' + (f === "HIGH" ? "hi" : f === "LOW" ? "lo" : "") + '">' + ordered.map((c) => { const v = c.cell(p); return "<td" + (v[1] ? ' class="num"' : "") + ">" + v[0] + "</td>"; }).join("") + "</tr>");
+    }
+    tb.innerHTML = parts.join("");
+    $("tableNote").textContent = note + " Drag a column header to reorder the columns.";
+  }
+  (function () {
+    const head = $("thead"); let from = null;
+    const clear = () => head.querySelectorAll("th").forEach((h) => h.classList.remove("dropL", "dropR"));
+    const side = (e, th) => { const r = th.getBoundingClientRect(); return e.clientX < r.left + r.width / 2 ? "L" : "R"; };
+    head.addEventListener("dragstart", (e) => {
+      const th = e.target.closest && e.target.closest("th"); if (!th) return;
+      from = th.dataset.k; colDrag = true; th.classList.add("dragging");
+      try { e.dataTransfer.setData("text/plain", from); e.dataTransfer.effectAllowed = "move"; } catch (x) {}
+    });
+    head.addEventListener("dragover", (e) => {
+      if (!from) return; const th = e.target.closest("th"); if (!th) return;
+      e.preventDefault(); clear(); th.classList.add(side(e, th) === "L" ? "dropL" : "dropR");
+    });
+    head.addEventListener("dragleave", (e) => { if (!head.contains(e.relatedTarget)) clear(); });
+    head.addEventListener("drop", (e) => {
+      if (!from) return; const th = e.target.closest("th"); if (!th) return; e.preventDefault();
+      const keys = state.colKeys.filter((k) => k !== from), to = th.dataset.k;
+      if (to !== from) { let idx = keys.indexOf(to); if (side(e, th) === "R") idx++; keys.splice(idx, 0, from); state.colOrder = { sig: state.colSig, keys }; }
+    });
+    head.addEventListener("dragend", () => { from = null; colDrag = false; clear(); renderTable(); });
+  })();
+  function csv() { const r = state.data; return r ? csvOf(r.samples, state.device, r.mission, state.readAt) : ""; }
+  function csvOf(samples, d, m, readAtMs) {
+    const q = (v) => { v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    let tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+    const off = (t) => { const o = -new Date(t).getTimezoneOffset(), a = Math.abs(o); return (o < 0 ? "-" : "+") + pad(Math.floor(a / 60)) + ":" + pad(a % 60); };
+    const meta = [d ? d.rom : "", d ? d.model : "", d ? d.family : "", d ? d.capacity : "", tz];
+    const created = fmtTime(Date.now()), readAt = readAtMs ? fmtTime(readAtMs) : "", mission = m ? [m.rateSec, m.res, m.highOn === false ? "off" : m.high, m.lowOn === false ? "off" : m.low, m.startAt ? fmtTime(m.startAt) : "", readAt, created] : ["", "", "", "", "", readAt, created];
+    const hh = !!(samples.length && samples[0].h != null);
+    const lines = ["index,timestamp,temperature_c" + (hh ? ",humidity_pct" : "") + ",device_id,model,family_code,memory_total_samples,timezone,utc_offset,sample_interval_s,resolution_c,high_alarm_c,low_alarm_c,mission_start,read_at,file_created"];
+    for (const p of samples) lines.push([p.i, fmtTime(p.t), p.v.toFixed(4), ...(hh ? [p.h != null ? p.h.toFixed(2) : ""] : []), ...meta, off(p.t), ...mission].map(q).join(","));
+    return lines.join("\n");
+  }
+  function fmtDate(d, f) {
+    const map = { YYYY: d.getFullYear(), YY: String(d.getFullYear()).slice(-2), MM: pad(d.getMonth() + 1), DD: pad(d.getDate()), HH: pad(d.getHours()), mm: pad(d.getMinutes()), ss: pad(d.getSeconds()) };
+    return f.replace(/YYYY|YY|MM|DD|HH|mm|ss/g, (k) => map[k]);
+  }
+  function fileName() {
+    const d = new Date(), defaults = { date: "YYYY-MM-DD", time: "HH-mm-ss", datetime: "YYYY-MM-DD_HH-mm-ss" };
+    const fill = (t) => t.replace(/\{(id|model|date|time|datetime)(?::([^}]*))?\}/g, (m, k, f) => k === "id" ? (state.device ? state.device.rom : "device") : k === "model" ? (state.device ? state.device.model : "model") : fmtDate(d, f || defaults[k]))
+      .replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "");
+    return (fill($("fnName").value) || "ibutton-log") + ".csv";
+  }
+  function updateName() { const n = fileName(); $("fnPreview").textContent = n; $("dragName").textContent = n; }
+  const SUGGEST_DEFAULTS = ["{id}_{datetime}", "{model}_{id}_{datetime}", "experiment_{id}_{datetime:YYYYMMDD-HHmm}", "{date}"];
+  function loadHist() { try { const h = JSON.parse(localStorage.getItem("ib_hist_fnName") || "[]"); return Array.isArray(h) ? h : []; } catch (e) { return []; } }
+  function fillList() {
+    const items = [...new Set([...loadHist(), ...SUGGEST_DEFAULTS])], dl = $("dlName");
+    dl.innerHTML = ""; items.forEach((v) => { const o = document.createElement("option"); o.value = v; dl.appendChild(o); });
+  }
+  function rememberNames() {
+    const v = $("fnName").value.trim(); if (!v) return;
+    const h = [v, ...loadHist().filter((x) => x !== v)].slice(0, 12);
+    try { localStorage.setItem("ib_hist_fnName", JSON.stringify(h)); } catch (e) {}
+    fillList();
+  }
+  try { const v = localStorage.getItem("ib_fnName"); if (v !== null) $("fnName").value = v; } catch (e) {}
+  fillList();
+  $("fnName").addEventListener("input", () => { try { localStorage.setItem("ib_fnName", $("fnName").value); } catch (e) {} updateName(); });
+  $("fnName").addEventListener("change", rememberNames);
+  ["btnCsv", "btnCopy"].forEach((id) => $(id).addEventListener("click", rememberNames));
+  updateName(); setInterval(updateName, 1000);
+
+  /* drag the file out of the browser (Chrome and Edge hand the file to the folder or mail window) */
+  // Only Chromium browsers (Chrome, Edge) on a mouse or trackpad hand a dragged file to the folder or mail window.
+  let canDragOut = false;
+  try { canDragOut = !!navigator.userAgentData && window.matchMedia("(pointer: fine)").matches; } catch (e) {}
+  $("dragFile").hidden = !canDragOut; $("dragHint").hidden = !canDragOut;
+  function setDragOk(ok) { $("dragFile").draggable = ok; $("dragFile").classList.toggle("off", !ok); }
+  $("dragFile").addEventListener("dragstart", (e) => {
+    if (!state.data || !state.data.samples.length) { e.preventDefault(); return; }
+    const name = fileName(), text = csv(), url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    try { e.dataTransfer.setData("DownloadURL", "text/csv:" + name + ":" + url); } catch (x) {}
+    e.dataTransfer.setData("text/plain", text);
+    e.dataTransfer.effectAllowed = "copy";
+    rememberNames();
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  });
+  $("btnCopy").addEventListener("click", async () => {
+    const text = csv();
+    try { await navigator.clipboard.writeText(text); log("CSV copied (" + state.data.samples.length + " rows).", "o"); }
+    catch (e) { log("Clipboard blocked by the browser. Use Save CSV.", "w"); }
+  });
+  // Save through the viewer's save prompt when embedded, otherwise as a normal browser download.
+  async function saveFile(name, data, mime) {
+    let dl = null;
+    try { dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (e) { dl = null; }
+    if (dl) {
+      try { await dl.save({ filename: name, data }); log("Saved " + name + ".", "o"); }
+      catch (e) { if (e && e.code === "declined") log("Save cancelled."); else log("Save failed: " + ((e && (e.message || e.code)) || "unknown") + ".", "e"); }
+      return;
+    }
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mime }), a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    log("Saved " + name + " to your downloads folder.", "o");
+  }
+  $("btnCsv").addEventListener("click", () => saveFile(fileName(), csv(), "text/csv"));
+
+  // Chart text is sized to match the Data source box: the SVGs scale with the page, so the font size is counter-scaled.
+  function fitFonts() {
+    const ref = document.querySelector("#srcList dt") || document.body, target = parseFloat(getComputedStyle(ref).fontSize) || 14;
+    ["chart", "hist", "hist2"].forEach((id) => {
+      const svg = $(id), w = svg.getBoundingClientRect().width;
+      if (w > 0) svg.style.setProperty("--svgfs", (target * 860) / w + "px");
+    });
+  }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(fitFonts); ["chart", "hist", "hist2"].forEach((id) => ro.observe($(id))); }
+  window.addEventListener("resize", fitFonts);
+
+  function renderAll() { renderStats(); renderChart(); renderTable(); fitFonts(); }
+
+  ["cfgHigh", "cfgLow"].forEach((id) => $(id).addEventListener("input", () => { if (state.data) renderAll(); }));
+
+  function fmtLong(sec) {
+    sec = Math.round(sec);
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60), x = sec % 60, out = [];
+    if (d) out.push(d + " d"); if (h) out.push(h + " h"); if (m && d < 10) out.push(m + " min"); if (x && !d && !h) out.push(x + " s");
+    return out.join(" ") || "0 s";
+  }
+  function updateEstimate() {
+    const c = readConfig(), sp = specNow(), cap = capFor(c.res, sp), bits = optFor(c.res, sp).bits + " bit";
+    const total = cap * c.rateSec;
+    if (c.rollover) {
+      $("estDur").textContent = "Unlimited";
+      $("estSub").textContent = "Oldest samples are overwritten. Memory keeps the latest " + cap.toLocaleString() + " (" + fmtLong(total) + ") at " + bits + ".";
+      return;
+    }
+    $("estDur").textContent = fmtLong(total);
+    const end = Date.now() + (c.delaySec + total) * 1000;
+    $("estSub").textContent = cap.toLocaleString() + " samples (" + bits + ") every " + fmtRate(c.rateSec) + ". If started now, memory is full by " + fmtTime(end) + ".";
+  }
+  ["cfgRate", "cfgUnit", "cfgRes", "cfgDelay", "cfgRoll"].forEach((id) => { $(id).addEventListener("input", updateEstimate); $(id).addEventListener("change", updateEstimate); });
+  updateEstimate(); setInterval(updateEstimate, 30000);
+
+  /* ---------- actions ---------- */
+  function readConfig() {
+    const unit = +$("cfgUnit").value, val = Math.max(1, Math.round(+$("cfgRate").value || 1));
+    return {
+      rateSec: val * unit, high: +$("cfgHigh").value, low: +$("cfgLow").value, res: +$("cfgRes").value,
+      delaySec: Math.max(0, Math.round(+$("cfgDelay").value || 0)) * 60, sync: $("cfgSync").checked, rollover: $("cfgRoll").checked,
+      alarmHigh: $("cfgHighOn").checked, alarmLow: $("cfgLowOn").checked
+    };
+  }
+
+  /* ---------- saved mission settings (kept in this browser) ---------- */
+  const PRESET_KEY = "ib_missionPresets";
+  let presetMem = [], presetArm = null;
+  function loadPresets() { try { const p = JSON.parse(localStorage.getItem(PRESET_KEY) || "[]"); return Array.isArray(p) ? p : []; } catch (e) { return presetMem.slice(); } }
+  function storePresets(list) { presetMem = list; try { localStorage.setItem(PRESET_KEY, JSON.stringify(list)); } catch (e) {} }
+  function fillPresets(sel) {
+    const s = $("cfgPreset"), list = loadPresets().sort((a, b) => a.name.localeCompare(b.name));
+    const add = (v, t) => { const o = document.createElement("option"); o.value = v; o.textContent = t; s.appendChild(o); };
+    s.textContent = "";
+    add("", list.length ? "Choose..." : "None saved");
+    list.forEach((p) => { const on = { alarmHigh: p.alarmHigh !== false, alarmLow: p.alarmLow !== false }; add(p.name, p.name + " (" + fmtRate(p.rateSec) + ", " + (on.alarmHigh && on.alarmLow ? p.low + " to " + p.high + " °C" : on.alarmHigh ? "high " + p.high + " °C" : on.alarmLow ? "low " + p.low + " °C" : "no alarms") + ")"); });
+    s.value = sel && list.some((p) => p.name === sel) ? sel : "";
+    s.disabled = !list.length;
+    $("btnPresetDel").disabled = !s.value;
+  }
+  // put saved settings into the form, adjusted to what the current logger supports
+  function applyPreset(p) {
+    const sp = specNow(), notes = [], rate = clampRate(sp, p.rateSec);
+    if (rate !== p.rateSec) notes.push("interval " + fmtRate(rate));
+    const unit = sp.units.slice().reverse().find((u) => rate % u === 0) || sp.units[0];
+    $("cfgUnit").value = String(unit); $("cfgRate").value = Math.max(1, Math.round(rate / unit));
+    const opt = sp.resOpts.find((o) => Math.abs(o.res - p.res) < 1e-9) || pickRes(sp, p.res);
+    if (opt.res !== p.res) notes.push("resolution " + opt.res + " °C");
+    $("cfgRes").value = String(opt.res);
+    setAlarms({ high: p.high, low: p.low, highOn: p.alarmHigh !== false, lowOn: p.alarmLow !== false }); $("cfgDelay").value = Math.round((p.delaySec || 0) / 60);
+    $("cfgSync").checked = !!p.sync;
+    const roll = !!p.rollover && !sp.noRollover;
+    if (p.rollover && !roll) notes.push("overwrite off");
+    $("cfgRoll").checked = roll;
+    updateEstimate(); if (state.data) renderAll();
+    log('Loaded saved settings "' + p.name + '"' + (notes.length ? ", adjusted for the " + sp.id + ": " + notes.join(", ") + "." : "."), notes.length ? "w" : "o");
+  }
+  function savePreset() {
+    const name = $("cfgPresetName").value.trim();
+    if (!name) { log("Type a name for the settings, then press Save.", "w"); $("cfgPresetName").focus(); return; }
+    const c = readConfig();
+    if (c.alarmHigh && c.alarmLow && !(c.low < c.high)) { log("Settings not saved: the low alarm must be below the high alarm.", "e"); return; }
+    const list = loadPresets(), i = list.findIndex((p) => p.name.toLowerCase() === name.toLowerCase());
+    const entry = Object.assign({ name }, c, { savedAt: Date.now() });
+    if (i >= 0) list[i] = entry; else list.push(entry);
+    storePresets(list); fillPresets(name);
+    log((i >= 0 ? "Updated" : "Saved") + ' settings "' + name + '": every ' + fmtRate(c.rateSec) + ", " + alarmText(c) + ", " + c.res + " °C resolution.", "o");
+  }
+  const disarmPresetDel = () => { if (presetArm) { clearTimeout(presetArm); presetArm = null; } $("btnPresetDel").textContent = "Delete"; };
+  $("cfgPreset").addEventListener("change", () => {
+    disarmPresetDel();
+    const p = loadPresets().find((x) => x.name === $("cfgPreset").value);
+    $("btnPresetDel").disabled = !p;
+    if (p) { $("cfgPresetName").value = p.name; applyPreset(p); }
+  });
+  $("btnPresetSave").addEventListener("click", savePreset);
+  $("cfgPresetName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); savePreset(); } });
+  $("btnPresetDel").addEventListener("click", () => {
+    const name = $("cfgPreset").value; if (!name) return;
+    if (!presetArm) { $("btnPresetDel").textContent = "Confirm"; presetArm = setTimeout(disarmPresetDel, 4000); return; }
+    disarmPresetDel();
+    storePresets(loadPresets().filter((p) => p.name !== name)); fillPresets("");
+    log('Deleted saved settings "' + name + '".', "w");
+  });
+  // once the form is edited by hand it no longer matches the chosen saved settings
+  ["cfgRate", "cfgUnit", "cfgHigh", "cfgLow", "cfgHighOn", "cfgLowOn", "cfgRes", "cfgDelay", "cfgSync", "cfgRoll"].forEach((id) => $(id).addEventListener("input", () => { if ($("cfgPreset").value) { $("cfgPreset").value = ""; $("btnPresetDel").disabled = true; disarmPresetDel(); } }));
+  fillPresets("");
+  async function guarded(name, fn) {
+    if (!state.device || state.busy) return;
+    const hw = state.device.kind === "usb";
+    if (hw) { state.busy = true; state.busyText = name + " in progress. Keep the iButton in the reader."; refreshChrome(); }
+    try { await fn(); } catch (e) { log(name + " failed: " + e.message, "e"); }
+    finally { if (hw) { state.busy = false; state.busyText = ""; refreshChrome(); } }
+  }
+  /* ---------- history: every explicit read is saved by device ID and read time ---------- */
+  const HIST_DB = "ibutton-console", HIST_STORE = "reads";
+  const memHist = new Map();
+  let histIdb = null, histCache = [], histArm = null;
+  function histOpen() {
+    return new Promise((resolve) => {
+      try {
+        if (!window.indexedDB) return resolve(null);
+        const rq = indexedDB.open(HIST_DB, 1);
+        rq.onupgradeneeded = () => rq.result.createObjectStore(HIST_STORE, { keyPath: "key" });
+        rq.onsuccess = () => resolve(rq.result); rq.onerror = () => resolve(null); rq.onblocked = () => resolve(null);
+      } catch (e) { resolve(null); }
+    });
+  }
+  async function histDb() { if (histIdb === null) histIdb = (await histOpen()) || false; return histIdb; }
+  const idbDone = (tx) => new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
+  async function histPut(e) { const db = await histDb(); if (!db) { memHist.set(e.key, e); return; } const tx = db.transaction(HIST_STORE, "readwrite"); tx.objectStore(HIST_STORE).put(e); await idbDone(tx); }
+  async function histDel(key) { memHist.delete(key); const db = await histDb(); if (!db) return; const tx = db.transaction(HIST_STORE, "readwrite"); tx.objectStore(HIST_STORE).delete(key); await idbDone(tx); }
+  async function histWipe() { memHist.clear(); const db = await histDb(); if (!db) return; const tx = db.transaction(HIST_STORE, "readwrite"); tx.objectStore(HIST_STORE).clear(); await idbDone(tx); }
+  async function histAll() {
+    const db = await histDb(); let rows = [];
+    if (db) { rows = await new Promise((res, rej) => { const rq = db.transaction(HIST_STORE).objectStore(HIST_STORE).getAll(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error); }); }
+    memHist.forEach((v) => { if (!rows.some((r) => r.key === v.key)) rows.push(v); });
+    return rows;
+  }
+  async function saveRead(res) {
+    const d = state.device, m = res.mission;
+    if (!d || !res.samples.length) { log("Nothing saved to history: the device holds no samples.", "w"); return; }
+    const readAt = state.readAt || Date.now();
+    const entry = { key: d.rom + "|" + readAt, deviceId: d.rom, model: d.model, family: d.family, capacity: d.capacity, demo: state.demo, readAt, savedAt: Date.now(), status: res.status, clock: res.clock || null, mission: m ? Object.assign({}, m) : null, t: res.samples.map((p) => p.t), v: res.samples.map((p) => p.v), h: res.samples[0].h != null ? res.samples.map((p) => p.h) : null };
+    try { await histPut(entry); } catch (e) { memHist.set(entry.key, entry); }
+    log("Saved to history: " + d.rom + ", read " + fmtTime(readAt) + ".", "o");
+    await renderHistory();
+  }
+  async function renderHistory() {
+    const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    let rows = [];
+    try { rows = await histAll(); } catch (e) { rows = Array.from(memHist.values()); }
+    rows.sort((a, b) => b.readAt - a.readAt); histCache = rows;
+    const groups = new Map(); rows.forEach((r) => { if (!groups.has(r.deviceId)) groups.set(r.deviceId, []); groups.get(r.deviceId).push(r); });
+    let html = "";
+    groups.forEach((list, id) => {
+      html += '<div class="hgroup"><div class="hhead"><span class="mono">' + esc(id) + '</span><span class="hcount">' + list.length + (list.length === 1 ? " read" : " reads") + "</span></div>";
+      list.forEach((r) => {
+        html += '<div class="hrow" data-key="' + esc(r.key) + '"><span class="mono hwhen">' + fmtTime(r.readAt) + '</span><span class="hmeta">' + r.t.length.toLocaleString() + " samples</span>" + (r.demo ? '<span class="pill err">Demo</span>' : "") +
+          '<button class="btn sm" type="button" data-act="open">Open</button><button class="btn sm" type="button" data-act="export">Export</button><button class="btn sm danger" type="button" data-act="del">Delete</button></div>';
+      });
+      html += "</div>";
+    });
+    $("histList").innerHTML = html || '<div class="empty" style="padding:14px 8px">No reads saved yet. Press Read device to save the first one.</div>';
+    $("btnHistClear").disabled = $("btnHistExport").disabled = !rows.length;
+    const persistent = !!(await histDb());
+    $("histNote").textContent = persistent ? "Saved in this browser, by device ID and read time. Clearing the browser's site data removes it." : "This browser view blocks persistent storage, so history lasts until the page closes.";
+  }
+  function openHistory(r) {
+    const readOnly = async () => { throw new Error("A saved read is read-only."); };
+    const samples = r.t.map((t, i) => (r.h ? { i: i + 1, t, v: r.v[i], h: r.h[i] } : { i: i + 1, t, v: r.v[i] }));
+    state.demo = false; $("demoToggle").checked = false; releaseReader();
+    state.file = "Saved read " + r.deviceId + ", " + fmtTime(r.readAt); state.sourceKind = "history"; state.fileInfo = null; state.readAt = r.readAt; state.historyInfo = { savedAt: r.savedAt, demo: r.demo };
+    state.device = { kind: "file", spec: specByName(r.model), rom: r.deviceId, model: r.model, family: r.family, capacity: r.capacity, read: async () => state.data, start: readOnly, stop: readOnly, clear: readOnly };
+    if (r.mission) setAlarms(r.mission);
+    refreshChrome();
+    applyData({ status: "history", samples, clock: r.clock, mission: r.mission });
+    log("Opened saved read " + r.deviceId + ", " + fmtTime(r.readAt) + ": " + samples.length.toLocaleString() + " samples.", "o");
+  }
+  $("histList").addEventListener("click", async (e) => {
+    const b = e.target.closest && e.target.closest("button[data-act]"); if (!b) return;
+    const row = b.closest(".hrow"), key = row && row.getAttribute("data-key"), r = histCache.find((x) => x.key === key); if (!r) return;
+    if (b.getAttribute("data-act") === "open") openHistory(r);
+    else if (b.getAttribute("data-act") === "export") await saveFile(histFileName(r), histCsv(r), "text/csv");
+    else { try { await histDel(key); log("Deleted saved read " + r.deviceId + ", " + fmtTime(r.readAt) + ".", "w"); } catch (err) { log("Could not delete: " + err.message, "e"); } await renderHistory(); }
+  });
+  // export: one CSV per saved read (same columns as Save CSV), or all of them in a ZIP
+  const histFileName = (r) => (r.deviceId + "_" + fmtDate(new Date(r.readAt), "YYYY-MM-DD_HH-mm-ss") + ".csv").replace(/[\\/:*?"<>|\s]+/g, "_");
+  function histCsv(r) {
+    const samples = r.t.map((t, i) => (r.h ? { i: i + 1, t, v: r.v[i], h: r.h[i] } : { i: i + 1, t, v: r.v[i] }));
+    return csvOf(samples, { rom: r.deviceId, model: r.model, family: r.family, capacity: r.capacity }, r.mission, r.readAt);
+  }
+  const CRC_T = (() => { const tb = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; tb[n] = c >>> 0; } return tb; })();
+  const crc32 = (u8) => { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  // minimal ZIP writer (stored, no compression)
+  function makeZip(files) {
+    const enc = new TextEncoder(), parts = [], central = []; let offset = 0;
+    const d = new Date(), dosT = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dosD = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    for (const f of files) {
+      const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
+      const lh = new DataView(new ArrayBuffer(30)); lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true); lh.setUint16(10, dosT, true); lh.setUint16(12, dosD, true); lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh.buffer, name, data);
+      const ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, dosT, true); ch.setUint16(14, dosD, true); ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+      central.push(ch.buffer, name);
+      offset += 30 + name.length + data.length;
+    }
+    let csz = 0; central.forEach((c) => (csz += c.byteLength || c.length));
+    const end = new DataView(new ArrayBuffer(22)); end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, csz, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end.buffer], { type: "application/zip" });
+  }
+  $("btnHistExport").addEventListener("click", async () => {
+    if (!histCache.length) return;
+    const files = histCache.slice().sort((a, b) => a.readAt - b.readAt).map((r) => ({ name: histFileName(r), text: histCsv(r) }));
+    await saveFile("ibutton-history_" + fmtDate(new Date(), "YYYY-MM-DD_HH-mm-ss") + ".zip", makeZip(files), "application/zip");
+    log("Exported " + files.length + (files.length === 1 ? " saved read." : " saved reads."), "o");
+  });
+  $("btnHistClear").addEventListener("click", async () => {
+    if (!histArm) {
+      $("btnHistClear").textContent = "Confirm clear";
+      histArm = setTimeout(() => { histArm = null; $("btnHistClear").textContent = "Clear history"; }, 4000);
+      return;
+    }
+    clearTimeout(histArm); histArm = null; $("btnHistClear").textContent = "Clear history";
+    try { await histWipe(); log("History cleared.", "w"); } catch (err) { log("Could not clear history: " + err.message, "e"); }
+    await renderHistory();
+  });
+
+  async function doRead(save) {
+    if (!state.demo && state.reader && !state.file && !state.busy && !(await attachLogger())) return;
+    await guarded("Read", async () => {
+      if (state.device.kind === "usb") log("Reading " + state.device.model + " " + state.device.rom + "...");
+      const res = await state.device.read();
+      if (res.mission && res.status !== "idle") setAlarms(res.mission);
+      applyData(res);
+      log("Read " + res.samples.length.toLocaleString() + " samples from " + state.device.rom + ".", "o");
+      if (save === true && state.device.kind !== "file") await saveRead(res);
+    });
+  }
+  $("btnRead").addEventListener("click", () => doRead(true));
+  $("btnStart").addEventListener("click", () => guarded("Start", async () => {
+    const cfg = readConfig();
+    const sp = specNow();
+    if (cfg.rateSec < sp.minRate || cfg.rateSec > sp.maxRate) throw new Error("Interval must be " + fmtRate(sp.minRate) + " to " + fmtRate(sp.maxRate) + " for " + sp.id + ".");
+    if (cfg.alarmHigh && cfg.alarmLow && cfg.low >= cfg.high) throw new Error("Low alarm must be below high alarm.");
+    if (cfg.rollover && sp.noRollover) throw new Error(sp.id + " cannot overwrite old samples. Turn off Overwrite oldest samples.");
+    if (state.device.kind === "usb") log("Starting mission on " + state.device.rom + ". This clears the logger's memory first and takes a few seconds.");
+    if (state.device.kind === "demo") state.device.tick();
+    await state.device.start(cfg);
+    log("Mission started, every " + fmtRate(cfg.rateSec) + ", " + alarmText(cfg) + ".", "o");
+    const res = await state.device.read(); applyData(res);
+    if (state.device.kind === "demo") log("Demo history generated: " + res.samples.length.toLocaleString() + " samples from " + (res.samples.length ? fmtTime(res.samples[0].t) : "n/a") + ".", "o");
+  }));
+  $("btnStop").addEventListener("click", () => guarded("Stop", async () => { await state.device.stop(); log("Mission stopped.", "o"); applyData(await state.device.read()); }));
+  let clearArmed = null;
+  $("btnClear").addEventListener("click", () => guarded("Clear", async () => {
+    if (!clearArmed) {
+      $("clearNote").hidden = false; $("btnClear").textContent = "Confirm clear";
+      clearArmed = setTimeout(() => { clearArmed = null; $("clearNote").hidden = true; $("btnClear").textContent = "Clear memory"; }, 4000);
+      return;
+    }
+    clearTimeout(clearArmed); clearArmed = null; $("clearNote").hidden = true; $("btnClear").textContent = "Clear memory";
+    await state.device.clear(); log("Memory cleared.", "w"); applyData(await state.device.read());
+  }));
+
+  /* ---------- open a CSV file (this app's export, or any file with timestamp and temperature columns) ---------- */
+  function parseCsv(text) {
+    const rows = []; let row = [], f = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"') q = true;
+      else if (c === ",") { row.push(f); f = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); f = ""; if (row.some((x) => x.trim() !== "")) rows.push(row); row = []; }
+      else f += c;
+    }
+    row.push(f); if (row.some((x) => x.trim() !== "")) rows.push(row);
+    return rows;
+  }
+  function parseTime(v) { let s = String(v || "").trim(); if (/^\d{4}-\d{2}-\d{2} \d/.test(s)) s = s.replace(" ", "T"); return Date.parse(s); }
+  function loadCsv(name, text, info) {
+    const rows = parseCsv(text.replace(/^\uFEFF/, ""));
+    if (rows.length < 2) throw new Error("No data rows found.");
+    const head = rows[0].map((h) => h.trim().toLowerCase());
+    const col = (...names) => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+    let ti = col("timestamp", "time", "datetime", "date"), vi = col("temperature_c", "temperature", "temp", "temp_c", "value"), first = 1, header = true;
+    if (ti < 0 || vi < 0) { ti = 0; vi = 1; header = false; first = isNaN(parseFloat(rows[0][1])) ? 1 : 0; }
+    const hi = header ? col("humidity_pct", "humidity", "rh", "humidity_rh") : -1;
+    const meta = (n) => { const i = header ? col(n) : -1; return i >= 0 && rows[1] ? (rows[1][i] || "").trim() : ""; };
+    const num = (n) => { const x = parseFloat(meta(n)); return isFinite(x) ? x : null; };
+    const samples = [];
+    for (const r of rows.slice(first)) { const t = parseTime(r[ti]), v = parseFloat(r[vi]); if (isFinite(t) && isFinite(v)) { const pt = { t, v, raw: r }; if (hi >= 0) { const h = parseFloat(r[hi]); if (isFinite(h)) pt.h = h; } samples.push(pt); } }
+    if (!samples.length) throw new Error("No valid timestamp and temperature values found.");
+    samples.sort((a, b) => a.t - b.t); samples.forEach((p, k) => (p.i = k + 1));
+    let rate = num("sample_interval_s");
+    if (!rate) { const d = []; for (let k = 1; k < samples.length; k++) d.push(samples[k].t - samples[k - 1].t); d.sort((a, b) => a - b); rate = d.length ? Math.max(1, Math.round(d[d.length >> 1] / 1000)) : 60; }
+    const res = num("resolution_c") || (samples.some((p) => Math.abs(p.v * 2 - Math.round(p.v * 2)) > 1e-6) ? 0.0625 : 0.5);
+    const cur = thr(), high = num("high_alarm_c") ?? cur.high, low = num("low_alarm_c") ?? cur.low;
+    const onOf = (n) => { const v = meta(n).toLowerCase(); return v !== "" && v !== "off"; }, highOn = onOf("high_alarm_c"), lowOn = onOf("low_alarm_c");
+    const startAt = parseTime(meta("mission_start")) || samples[0].t;
+    const readOnly = async () => { throw new Error("A CSV file is read-only."); };
+    state.csvHead = header ? rows[0].map((h) => h.trim()) : ["timestamp", "temperature"]; state.demo = false; $("demoToggle").checked = false; releaseReader(); state.file = name; state.sourceKind = "file"; state.historyInfo = null; state.readAt = parseTime(meta("read_at")) || null;
+    state.fileInfo = { size: info ? info.size : null, modified: info ? info.lastModified : null, created: parseTime(meta("file_created")) || null };
+    state.device = { kind: "file", spec: specByName(meta("model")), rom: meta("device_id") || "unknown", model: meta("model") || "Imported file", family: meta("family_code") || "n/a", capacity: num("memory_total_samples") || capFor(res, DEFAULT_SPEC), read: async () => state.data, start: readOnly, stop: readOnly, clear: readOnly };
+    setAlarms({ high, low, highOn, lowOn });
+    refreshChrome();
+    applyData({ status: "file", samples, clock: null, mission: { rateSec: rate, res, high, low, highOn, lowOn, startAt, delaySec: 0, sync: false, rollover: false, stopped: true } });
+    log("Opened " + name + ": " + samples.length.toLocaleString() + " samples, " + fmtTime(samples[0].t) + " to " + fmtTime(samples[samples.length - 1].t) + ".", "o");
+  }
+  // drag a CSV file from the desktop into the window
+  let dragDepth = 0;
+  const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf("Files") >= 0;
+  window.addEventListener("dragenter", (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $("dropHint").hidden = false; });
+  window.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+  window.addEventListener("dragleave", (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $("dropHint").hidden = true; });
+  window.addEventListener("drop", async (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); dragDepth = 0; $("dropHint").hidden = true;
+    const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+    if (!/\.(csv|txt)$/i.test(f.name) && !/^text\//.test(f.type)) { log("Could not open " + f.name + ": drop a .csv file.", "e"); return; }
+    try { loadCsv(f.name, await f.text(), f); } catch (err) { log("Could not open " + f.name + ": " + err.message, "e"); }
+  });
+  $("btnOpenCsv").addEventListener("click", () => $("csvFile").click());
+  $("csvFile").addEventListener("change", async () => {
+    const f = $("csvFile").files && $("csvFile").files[0]; if (!f) return;
+    try { loadCsv(f.name, await f.text(), f); } catch (e) { log("Could not open " + f.name + ": " + e.message, "e"); }
+    $("csvFile").value = "";
+  });
+
+  // look for a logger on the 1-Wire bus and make it the current device; false when none is found
+  async function attachLogger() {
+    if (!state.reader || state.busy) return false;
+    state.busy = true; state.busyText = "Searching the 1-Wire bus..."; refreshChrome();
+    try {
+      const { roms, dev } = await findLogger(state.reader);
+      if (!dev) {
+        const other = roms.filter((r) => r[0] !== 0x81).map(busToRom);
+        state.device = null; state.data = null;
+        log(other.length ? "No supported logger on the reader. Found: " + other.join(", ") + " (supported families 21h, 41h, 53h)." : "No iButton found. Press it firmly into the reader, then press Read device.", "w");
+        return false;
+      }
+      if (!state.device || state.device.rom !== dev.rom) {
+        dev.onPage = (n, total) => { state.busyText = "Reading the logger: " + Math.round((100 * n) / total) + "% (" + n + " of " + total + " blocks). Keep the iButton in the reader."; $("readerNote").textContent = state.busyText; };
+        state.device = dev; state.data = null;
+        log("Found " + dev.model + ", device ID " + dev.rom + ".", "o");
+        applySpecToForm(dev.spec, { resWant: dev.spec.resOpts[dev.spec.resOpts.length - 1].res, rateSec: Math.max(dev.spec.minRate, 600), high: +$("cfgHigh").value, low: +$("cfgLow").value });
+      }
+      return true;
+    } catch (e) { log("Could not talk to the logger: " + e.message, "e"); return false; }
+    finally { state.busy = false; state.busyText = ""; refreshChrome(); }
+  }
+  $("btnConnect").addEventListener("click", async () => {
+    try {
+      state.reader = await DS2490.connect();
+      state.file = null; state.csvHead = null; state.fileInfo = null; state.sourceKind = null; state.historyInfo = null; state.device = null; state.data = null;
+      log("USB reader connected: " + state.reader.productName + ".", "o");
+      refreshChrome(); renderAll();
+      await doRead(false);
+    } catch (e) {
+      if (e && e.name === "NotFoundError") log("No reader selected.", "w");
+      else log("Connect failed: " + e.message + (e && e.name === "SecurityError" ? " The reader may be in use by another program (close OneWireViewer), or its driver is not WinUSB." : ""), "e");
+    }
+  });
+  if (navigator.usb) navigator.usb.addEventListener("disconnect", (e) => {
+    if (!state.reader || e.device !== state.reader.dev) return;
+    state.reader = null; state.busy = false; state.busyText = "";
+    if (state.device && state.device.kind === "usb") { state.device = null; state.data = null; renderAll(); }
+    log("USB reader unplugged.", "w"); refreshChrome();
+  });
+  $("btnDisconnect").addEventListener("click", async () => {
+    try { if (state.reader) await state.reader.close(); } catch (e) {}
+    state.reader = null; state.file = null; state.csvHead = null; state.fileInfo = null; state.lastRead = null; state.readAt = null; state.sourceKind = null; state.historyInfo = null; state.device = null; state.data = null; log("Disconnected."); refreshChrome(); renderAll();
+  });
+
+  $("demoToggle").addEventListener("change", async (e) => {
+    state.demo = e.target.checked; state.data = null; state.file = null; state.csvHead = null; state.fileInfo = null; state.lastRead = null; state.readAt = null; state.sourceKind = null; state.historyInfo = null;
+    if (state.demo) { selectDemo(state.spec.id, state.scen.id, true); log("Demo mode on. Simulated reader and logger attached.", "o"); refreshChrome(); await doRead(); }
+    else { state.device = null; log(state.reader ? "Demo mode off." : "Demo mode off. Connect a USB reader to continue."); refreshChrome(); pillSet("No device", "idle"); renderAll(); if (state.reader) await doRead(false); }
+  });
+
+  /* ---------- feedback and bug report ---------- */
+  const fbOpen = () => !$("fbOverlay").hidden;
+  function buildReport() {
+    const lines = [$("fbType").value.toUpperCase(), "", $("fbText").value.trim() || "(no message)"];
+    if ($("fbDiag").checked) {
+      const c = readConfig(), d = state.device;
+      lines.push("", "--- Diagnostics ---",
+        "Time: " + fmtTime(Date.now()),
+        "Mode: " + (state.demo ? "demo" : "hardware"),
+        "Device ID: " + (d ? d.rom : "none"),
+        "Reader attached: " + (state.reader ? "yes" : "no"),
+        "Mission status: " + $("missionPill").textContent,
+        "Samples: " + (state.data ? state.data.samples.length : 0),
+        "Settings: interval " + fmtRate(c.rateSec) + ", high " + (c.alarmHigh ? c.high + " C" : "off") + ", low " + (c.alarmLow ? c.low + " C" : "off") + ", resolution " + c.res + " C, delay " + c.delaySec / 60 + " min, rollover " + c.rollover,
+        "Browser: " + navigator.userAgent,
+        "Viewport: " + window.innerWidth + "x" + window.innerHeight,
+        "Recent activity:");
+      Array.from($("log").children).slice(0, 12).reverse().forEach((r) => lines.push("  " + r.children[0].textContent + " " + r.children[1].textContent));
+    }
+    return lines.join("\n");
+  }
+  function refreshReport() {
+    const text = buildReport(), to = $("fbTo").value.trim();
+    $("fbPreview").value = text;
+    const mail = $("fbMail"), ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to);
+    mail.href = ok ? "mailto:" + encodeURIComponent(to).replace("%40", "@") + "?subject=" + encodeURIComponent("iButton Console: " + $("fbType").value) + "&body=" + encodeURIComponent(text.slice(0, 1800)) : "#";
+    mail.style.opacity = ok ? "1" : "0.45"; mail.style.pointerEvents = ok ? "auto" : "none"; mail.setAttribute("aria-disabled", ok ? "false" : "true");
+  }
+  let fbReturn = null;
+  function openFb() { fbReturn = document.activeElement; $("fbOverlay").hidden = false; $("fbStatus").textContent = "Nothing is sent automatically. Copy the report or open an email draft."; refreshReport(); $("fbText").focus(); }
+  function closeFb() { $("fbOverlay").hidden = true; if (fbReturn && fbReturn.focus) fbReturn.focus(); }
+  try { const v = localStorage.getItem("ib_fbTo"); if (v) $("fbTo").value = v; } catch (e) {}
+  $("btnFeedback").addEventListener("click", openFb);
+  $("fbClose").addEventListener("click", closeFb);
+  $("fbOverlay").addEventListener("pointerdown", (e) => { if (e.target === $("fbOverlay")) closeFb(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && fbOpen()) closeFb(); });
+
+  /* ---------- about ---------- */
+  let aboutReturn = null;
+  function openAbout() { aboutReturn = document.activeElement; $("aboutOverlay").hidden = false; $("aboutClose").focus(); }
+  function closeAbout() { $("aboutOverlay").hidden = true; if (aboutReturn && aboutReturn.focus) aboutReturn.focus(); }
+  $("btnAbout").addEventListener("click", openAbout);
+  $("aboutClose").addEventListener("click", closeAbout);
+  $("aboutOverlay").addEventListener("pointerdown", (e) => { if (e.target === $("aboutOverlay")) closeAbout(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("aboutOverlay").hidden) closeAbout(); });
+  ["fbType", "fbText", "fbTo", "fbDiag"].forEach((id) => $(id).addEventListener("input", () => { if (id === "fbTo") { try { localStorage.setItem("ib_fbTo", $("fbTo").value); } catch (e) {} } refreshReport(); }));
+  $("fbCopy").addEventListener("click", async () => {
+    refreshReport();
+    try { await navigator.clipboard.writeText($("fbPreview").value); $("fbStatus").textContent = "Report copied to the clipboard."; }
+    catch (e) { $("fbPreview").focus(); $("fbPreview").select(); $("fbStatus").textContent = "Clipboard blocked. The report is selected: press Ctrl+C or Cmd+C to copy it."; }
+  });
+
+  /* ---------- collapsible boxes ---------- */
+  (function () {
+    let saved = {}; try { saved = JSON.parse(localStorage.getItem("ib_fold") || "{}") || {}; } catch (e) {}
+    const foldedByDefault = ["h-log", "h-hist"]; // Activity and History start collapsed until the user opens them
+    document.querySelectorAll(".panel").forEach((p) => {
+      const h2 = p.querySelector("header > h2"); if (!h2) return;
+      const key = h2.id, body = Array.from(p.children).filter((c) => c.tagName !== "HEADER");
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "fold";
+      h2.parentNode.insertBefore(btn, h2); btn.appendChild(h2);
+      const set = (c) => { p.classList.toggle("collapsed", c); btn.setAttribute("aria-expanded", String(!c)); btn.title = c ? "Expand" : "Collapse"; };
+      set(key in saved ? !!saved[key] : foldedByDefault.includes(key));
+      btn.addEventListener("click", () => {
+        const c = !p.classList.contains("collapsed"); set(c); saved[key] = c;
+        try { localStorage.setItem("ib_fold", JSON.stringify(saved)); } catch (e) {}
+        if (!c) renderAll();
+      });
+    });
+  })();
+
+  /* ---------- dark / light mode ---------- */
+  var mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function modePref() { try { return localStorage.getItem("ib_mode"); } catch (e) { return null; } }
+  function applyMode() {
+    const pref = modePref();
+    const dark = pref ? pref === "dark" : !!(mq && mq.matches);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    $("modeToggle").checked = dark;
+    if (typeof renderAll === "function") try { renderAll(); } catch (e) {}
+  }
+  $("modeToggle").addEventListener("change", () => {
+    try { localStorage.setItem("ib_mode", $("modeToggle").checked ? "dark" : "light"); } catch (e) {}
+    applyMode();
+  });
+  if (mq && mq.addEventListener) mq.addEventListener("change", () => { if (!modePref()) applyMode(); });
+
+  applyMode();
+
+  if (!navigator.usb) { const h = $("browserHint"); h.classList.add("warn"); h.textContent = "This browser has no WebUSB, so a real iButton reader cannot be used. Open this page in Chrome or Edge. Demo mode works here."; }
+
+  /* ---------- boot ---------- */
+  $("demoModel").innerHTML = SPECS.map((s) => '<option value="' + s.id + '">' + s.name + "</option>").join("");
+  $("demoScenario").innerHTML = [...new Set(SCENARIOS.map((s) => s.group))].map((g) => '<optgroup label="' + g + '">' + SCENARIOS.filter((s) => s.group === g).map((s) => '<option value="' + s.id + '">' + s.label + "</option>").join("") + "</optgroup>").join("");
+  const onDemoPick = async () => { selectDemo($("demoModel").value, $("demoScenario").value); refreshChrome(); await doRead(false); renderAll(); };
+  $("demoDur").addEventListener("change", () => { state.dur = +$("demoDur").value; onDemoPick(); });
+  $("demoModel").addEventListener("change", onDemoPick); $("demoScenario").addEventListener("change", onDemoPick);
+  selectDemo(DEFAULT_SPEC.id, DEFAULT_SCEN.id, true);
+  refreshChrome();
+  log("Console ready. Connect a USB reader, or turn on demo mode to try it without hardware.");
+  pillSet("No device", "idle"); renderAll();
+  renderHistory();
+  setInterval(() => { if (state.demo && state.device && state.data && (state.data.status === "running" || state.data.status === "waiting")) { state.device.read().then(applyData); } }, 2000);
+})();
+</script>
