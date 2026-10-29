@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>iButton Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap">
@@ -170,7 +171,7 @@ dl.kv dd { margin: 0; text-align: right; min-width: 0; overflow-wrap: anywhere; 
 .stat.hot .v { color: var(--hot); } .stat.cold .v { color: var(--cold); }
 
 .chartwrap { position: relative; }
-svg.chart { width: 100%; height: auto; display: block; touch-action: none; background: var(--chart-bg, transparent); border: var(--chart-border, 0); }
+svg.chart { width: 100%; height: auto; display: block; touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; background: var(--chart-bg, transparent); border: var(--chart-border, 0); }
 svg text { font-family: var(--font-data); font-size: 11px; fill: var(--muted); }
 .readout { position: absolute; top: 6px; right: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card, 6px); padding: 4px 8px; font-size: 12px; pointer-events: none; }
 .empty { padding: 36px 12px; text-align: center; color: var(--muted); }
@@ -197,7 +198,7 @@ tr.hi td { color: var(--hot); } tr.lo td { color: var(--cold); }
 .dragfile.off { opacity: .45; cursor: not-allowed; }
 .dragname { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .export .field input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
-.hit { cursor: ns-resize; }
+.hit { cursor: ns-resize; touch-action: none; }
 .hit:focus-visible { outline: none; }
 .hit:focus-visible + .thr, .hit:hover + .thr { stroke-width: 2.6; }
 .thr { pointer-events: none; }
@@ -220,8 +221,29 @@ tr.hi td { color: var(--hot); } tr.lo td { color: var(--cold); }
 .demo-tag { color: var(--accent); font-weight: 600; }
 
 @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+/* One column: drop the two-column wrappers so the panels can be reordered */
+@media (max-width: 900px) {
+  .rail, .stage { display: contents; }
+  [aria-labelledby="h-reader"] { order: 1; } [aria-labelledby="h-mission"] { order: 2; } [aria-labelledby="h-source"] { order: 3; }
+  [aria-labelledby="h-device"] { order: 4; } [aria-labelledby="h-data"] { order: 5; } [aria-labelledby="h-chart"] { order: 6; }
+  [aria-labelledby="h-stats"] { order: 7; } [aria-labelledby="h-hist"] { order: 8; } [aria-labelledby="h-log"] { order: 9; }
+}
+/* Phone: compact top bar (status dot only, short labels) */
+@media (max-width: 560px) {
+  .topbar { gap: 10px 14px; }
+  #connText, .wideOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #connChip { padding: 6px; }
+}
+#demoMore > summary { cursor: pointer; font-weight: 600; margin-top: 8px; }
+@media (min-width: 761px) { #demoMore > summary { display: none; } }
 @media (max-width: 560px) { .export { grid-template-columns: minmax(0, 1fr); } .dragfile { width: auto; min-width: 0; } }
 @media (max-width: 420px) { .form { grid-template-columns: 1fr; } }
+/* Touch screens: finger-sized controls, and 16px fields so iOS does not zoom in on focus */
+@media (pointer: coarse) {
+  .btn { min-height: 40px; } .btn.sm { padding: 6px 12px; }
+  .seg button { min-height: 36px; padding: 6px 12px; }
+  .field input[type="number"], .field input[type="text"], .field select, .field textarea, .export .field input, .bannerGrid select { font-size: 16px; }
+}
 .field input[type="number"], .field input[type="text"], .field select, .export .field input, .field textarea { border: var(--input-border, 1px solid var(--line)); border-radius: var(--r-input, 6px); background: var(--input-bg, var(--panel-2)); box-shadow: var(--input-shadow, none); color: var(--input-fg, var(--fg)); }
 .bannerGrid select { border: var(--banner-input-border, 1px solid var(--alert)); border-radius: var(--r-input, 6px); background: var(--input-bg, var(--panel)); box-shadow: var(--input-shadow, none); color: var(--input-fg, var(--fg)); }
 </style>
@@ -229,10 +251,10 @@ tr.hi td { color: var(--hot); } tr.lo td { color: var(--cold); }
 <div class="topbar">
   <div class="brand"><span class="brand-mark" aria-hidden="true"></span><h1>iButton Console</h1></div>
   <span class="chip" id="connChip"><span class="dot" id="connDot"></span><span id="connText">Not connected</span></span>
-  <button class="btn sm" id="btnFeedback" type="button">Feedback / bug report</button>
+  <button class="btn sm" id="btnFeedback" type="button">Feedback<span class="wideOnly"> / bug report</span></button>
   <button class="btn sm" id="btnAbout" type="button">About</button>
-  <label class="switch modeSw" for="modeToggle" title="Follows the system setting until you change it"><input type="checkbox" id="modeToggle"><span class="track"></span><span>Dark mode</span></label>
-  <label class="switch" for="demoToggle"><input type="checkbox" id="demoToggle"><span class="track"></span><span>Demo mode</span></label>
+  <label class="switch modeSw" for="modeToggle" title="Follows the system setting until you change it"><input type="checkbox" id="modeToggle"><span class="track"></span><span>Dark<span class="wideOnly"> mode</span></span></label>
+  <label class="switch" for="demoToggle"><input type="checkbox" id="demoToggle"><span class="track"></span><span>Demo<span class="wideOnly"> mode</span></span></label>
 </div>
 <div class="browserHint" id="browserHint">Reading a real iButton reader needs a browser with WebUSB, such as Chrome or Edge. Demo mode works in any browser.</div>
 
@@ -280,11 +302,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 <div class="banner" id="demoBanner" role="status">
   <div class="bannerTop"><strong>Demo mode.</strong> <span>A simulated reader and logger are attached. No hardware needed.</span></div>
+  <details id="demoMore" open><summary>Logger and application</summary>
   <div class="bannerGrid">
     <label for="demoModel">Logger</label><select id="demoModel"></select><div class="note" id="demoNoteDev"></div>
     <label for="demoScenario">Application</label><select id="demoScenario"></select><div class="note" id="demoNoteApp"></div>
     <label for="demoDur">Mission duration</label><select id="demoDur"><option value="21600">6 hours</option><option value="86400">1 day</option><option value="172800">2 days</option><option value="604800" selected>7 days</option><option value="2592000">30 days</option><option value="0">Until memory is full</option></select><div class="note">How much history the simulated logger holds.</div>
   </div>
+  </details>
 </div>
 
 <div class="layout">
@@ -1173,7 +1197,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   function releaseReader() { if (state.reader) { state.reader.close().catch(() => {}); log("USB reader released."); } state.reader = null; }
 
   /* ---------- UI state ---------- */
-  function setConn(text, cls) { $("connText").textContent = text; $("connDot").className = "dot " + (cls || ""); }
+  function setConn(text, cls) { $("connText").textContent = text; $("connChip").title = text; $("connDot").className = "dot " + (cls || ""); }
+  // Demo settings stay open on wide screens and start closed on phones, where they would fill the first screen
+  (function () { const mq = window.matchMedia("(max-width: 760px)"), f = () => { $("demoMore").open = !mq.matches; }; f(); if (mq.addEventListener) mq.addEventListener("change", f); })();
   function pillSet(text, cls) { const p = $("missionPill"); p.textContent = text; p.className = "pill " + cls; }
 
   const sheetUrl = (spec) => "https://www.analog.com/en/products/" + spec.id.toLowerCase() + ".html";
@@ -1364,7 +1390,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   }
 
   function renderHistogram(svg, st, th) {
-    const hum = !!(st && st.key === "h"), unit = hum ? "%RH" : "°C", W2 = 860, H2 = 300, m = { l: 78, r: 16, t: 16, b: 66 };
+    const hum = !!(st && st.key === "h"), unit = hum ? "%RH" : "°C", [W2, H2] = fitBox(svg, 860, 300, 220), m = { l: W2 < 560 ? 60 : 78, r: 16, t: 16, b: 66 };
     if (!st) { svg.innerHTML = '<text x="' + W2 / 2 + '" y="' + H2 / 2 + '" text-anchor="middle">No data to plot</text>'; return; }
     const bw = niceStep(st.max.v - st.min.v || 1, 18);
     const b0 = Math.floor(st.min.v / bw) * bw, b1 = Math.max(Math.ceil((st.max.v + 1e-9) / bw) * bw, b0 + bw);
@@ -1376,7 +1402,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     const y = (c) => H2 - m.b - (c / ctop) * (H2 - m.t - m.b);
     let out = "";
     for (let c = 0; c <= ctop + 1e-9; c += cstep) out += '<line x1="' + m.l + '" x2="' + (W2 - m.r) + '" y1="' + y(c) + '" y2="' + y(c) + '" stroke="var(--grid)"/><text x="' + (m.l - 6) + '" y="' + (y(c) + 4) + '" text-anchor="end">' + c + "</text>";
-    const xs = niceStep(dhi - dlo, 8);
+    const xs = niceStep(dhi - dlo, W2 < 560 ? 4 : 8);
     for (let v = Math.ceil(dlo / xs) * xs; v <= dhi + 1e-9; v += xs) out += '<text x="' + x(v) + '" y="' + (H2 - m.b + 25) + '" text-anchor="middle">' + +v.toFixed(2) + "</text>";
     counts.forEach((c, i) => {
       if (!c) return;
@@ -1393,17 +1419,22 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   }
 
   /* ---------- chart ---------- */
-  const W = 860, H = 377, M = { l: 78, r: 16, t: 16, b: 88 };
+  let W = 860, H = 377;
+  const M = { l: 78, r: 16, t: 16, b: 88 }, coarse = window.matchMedia("(pointer: coarse)").matches;
   let chartGeom = null;
+  // Narrower than the desktop size, a plot is drawn at its real pixel width (taller in proportion) so text and margins keep their size on phones
+  const boxW = (svg, w0) => { const w = svg.parentElement.clientWidth; return w > 0 && w < w0 ? Math.max(260, Math.round(w / 10) * 10) : w0; };
+  function fitBox(svg, w0, h0, hMin) { const w = boxW(svg, w0), h = w < w0 ? Math.max(hMin, Math.round((h0 * w) / w0)) : h0; svg.setAttribute("viewBox", "0 0 " + w + " " + h); return [w, h]; }
   function niceStep(span, n) { const raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
   function renderChart() {
     const svg = $("chart"), r = state.data;
     updateSeg();
+    [W, H] = fitBox(svg, 860, 377, 280);
     if (!r || r.samples.length < 2) {
       svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" text-anchor="middle">No data to plot</text>'; chartGeom = null; return;
     }
     const s = r.samples, m = thr(), mode = effView("chart"), showT = mode !== "hum", showH = mode !== "temp";
-    M.r = mode === "both" ? 80 : 16;
+    const narrow = W < 560; M.l = narrow ? 60 : 78; M.r = mode === "both" ? (narrow ? 60 : 80) : 16;
     const scale = (key, ext) => {
       let lo = Infinity, hi = -Infinity;
       for (const p of s) { const v = p[key]; if (v == null) continue; if (v < lo) lo = v; if (v > hi) hi = v; }
@@ -1420,14 +1451,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     let out = "";
     for (let v = lo; v <= hi + 1e-9; v += step) out += '<line x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--grid)"/><text x="' + (M.l - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + +v.toFixed(2) + "</text>";
     if (mode === "both") for (let v = SH.lo; v <= SH.hi + 1e-9; v += SH.step) out += '<text x="' + (W - M.r + 8) + '" y="' + (yH(v) + 4) + '" text-anchor="start" style="fill:var(--hum)">' + +v.toFixed(2) + "</text>";
-    const nx = 5, MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const nx = narrow ? (mode === "both" ? 1 : 2) : 5, MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     let prevDay = "", prevYear = 0;
     const ld = new Date(t1), lastKey = ld.getFullYear() + "-" + ld.getMonth() + "-" + ld.getDate();
     for (let i = 0; i <= nx; i++) {
       const t = t0 + ((t1 - t0) * i) / nx, d = new Date(t), span = t1 - t0;
       const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + (span < 3600000 ? ":" + pad(d.getSeconds()) : "");
       const dayKey = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(), mon = MONTHS[d.getMonth()] + (d.getFullYear() !== prevYear ? " " + d.getFullYear() : "");
-      const edge = i === 0 || i === nx, date = edge ? d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear() : dayKey !== prevDay && !(i === nx - 1 && dayKey === lastKey) ? d.getDate() + " " + mon : "";
+      const edge = i === 0 || i === nx, date = edge ? d.getDate() + " " + MONTHS[d.getMonth()] + (narrow ? "" : " " + d.getFullYear()) : dayKey !== prevDay && !(i === nx - 1 && dayKey === lastKey) ? d.getDate() + " " + mon : "";
       prevDay = dayKey; prevYear = d.getFullYear();
       const anchor = i === 0 ? "start" : i === nx ? "end" : "middle";
       out += '<text x="' + x(t) + '" y="' + (H - M.b + 25) + '" text-anchor="' + anchor + '">' + time + "</text>";
@@ -1435,7 +1466,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     }
     const tl = (id, cls, val, color, name, dy) => {
       const yy = y(val);
-      return '<line class="hit" id="hit' + id + '" tabindex="0" role="slider" aria-label="' + name + ' alarm threshold, drag or use arrow keys" aria-valuenow="' + val + '" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + yy + '" y2="' + yy + '" stroke="transparent" stroke-width="16"/>' +
+      return '<line class="hit" id="hit' + id + '" tabindex="0" role="slider" aria-label="' + name + ' alarm threshold, drag or use arrow keys" aria-valuenow="' + val + '" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + yy + '" y2="' + yy + '" stroke="transparent" stroke-width="' + (coarse ? 36 : 16) + '"/>' +
         '<line class="thr" id="thr' + id + '" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + color + '" stroke-width="1.6" stroke-dasharray="5 4"/>' +
         '<text id="lbl' + id + '" x="' + (W - M.r - 4) + '" y="' + (yy + dy) + '" text-anchor="end" style="fill:' + color + '">' + name + " " + val.toFixed(1) + " °C</text>";
     };
@@ -1473,6 +1504,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     try { e.target.setPointerCapture(e.pointerId); } catch (x) {}
     e.preventDefault(); $("readout").hidden = true;
   });
+  // The chart lets the page scroll vertically; a finger on a threshold line drags the line instead
+  $("chart").addEventListener("touchstart", (e) => { if (e.target.classList && e.target.classList.contains("hit")) e.preventDefault(); }, { passive: false });
   function endDrag() { if (!drag) return; drag = null; cancelAnimationFrame(dragRaf); renderAll(); }
   $("chart").addEventListener("pointerup", endDrag);
   $("chart").addEventListener("pointercancel", endDrag);
@@ -1662,11 +1695,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     const ref = document.querySelector("#srcList dt") || document.body, target = parseFloat(getComputedStyle(ref).fontSize) || 14;
     ["chart", "hist", "hist2"].forEach((id) => {
       const svg = $(id), w = svg.getBoundingClientRect().width;
-      if (w > 0) svg.style.setProperty("--svgfs", (target * 860) / w + "px");
+      if (w > 0) svg.style.setProperty("--svgfs", (target * svg.viewBox.baseVal.width) / w + "px");
     });
   }
-  if (window.ResizeObserver) { const ro = new ResizeObserver(fitFonts); ["chart", "hist", "hist2"].forEach((id) => ro.observe($(id))); }
-  window.addEventListener("resize", fitFonts);
+  // Redraw when the plot width changes enough to need a different drawing size; otherwise only rescale the text
+  function refit() { const c = $("chart"); if (boxW(c, 860) !== c.viewBox.baseVal.width) renderAll(); else fitFonts(); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(refit); ["chart", "hist", "hist2"].forEach((id) => ro.observe($(id))); }
+  window.addEventListener("resize", refit);
 
   function renderAll() { renderStats(); renderChart(); renderTable(); fitFonts(); }
 
@@ -2092,7 +2127,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   /* ---------- collapsible boxes ---------- */
   (function () {
     let saved = {}; try { saved = JSON.parse(localStorage.getItem("ib_fold") || "{}") || {}; } catch (e) {}
-    const foldedByDefault = ["h-log", "h-hist"]; // Activity and History start collapsed until the user opens them
+    // Activity and History start collapsed until the user opens them; on a phone also Mission setup, Device and Stats, to keep the page short
+    const foldedByDefault = ["h-log", "h-hist"].concat(window.matchMedia("(max-width: 900px)").matches ? ["h-mission", "h-device", "h-stats"] : []);
     document.querySelectorAll(".panel").forEach((p) => {
       const h2 = p.querySelector("header > h2"); if (!h2) return;
       const key = h2.id, body = Array.from(p.children).filter((c) => c.tagName !== "HEADER");
@@ -2127,7 +2163,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
   applyMode();
 
-  if (!navigator.usb) { const h = $("browserHint"); h.classList.add("warn"); h.textContent = "This browser has no WebUSB, so a real iButton reader cannot be used. Open this page in Chrome or Edge. Demo mode works here."; }
+  if (!navigator.usb) { const h = $("browserHint"); h.classList.add("warn"); h.textContent = "This browser has no WebUSB, so a real iButton reader cannot be used. Open this page in Chrome or Edge on a computer or an Android phone. Demo mode works here."; }
 
   /* ---------- boot ---------- */
   $("demoModel").innerHTML = SPECS.map((s) => '<option value="' + s.id + '">' + s.name + "</option>").join("");
