@@ -29,6 +29,8 @@ The script is split into sections marked `/* ---------- name ---------- */`. Glo
 
 **Import/export.** `csvOf` writes one row per sample with the device/mission metadata repeated in columns. `loadCsv`/`parseCsv` read that format back, or any CSV that has timestamp and temperature columns. File names come from templates such as `{id}_{datetime:YYYYMMDD-HHmm}`. `makeZip` is a small built-in ZIP writer (CRC32) for exporting several files at once.
 
+**WebMCP.** When `navigator.modelContext` exists, the WebMCP section registers agent tools (`registerTool`, or `provideContext` as a fallback). The tools call the same functions the buttons use (`doRead`, `doStart`, `doStop`, `doClear`, `setDemo`, `openHistory`). `guarded` resolves to `""` on success or to the error message, and the tools pass that back as `isError`. `start_mission` writes into the Mission setup form (`fillForm`) and then goes through the same limit checks as the Start button. Start, stop and clear need confirmation through `client.requestUserInteraction`, or `window.confirm` when the client doesn't provide it. When you add a button action, add a matching tool too.
+
 ## Conventions
 
 - Keep everything in the one HTML file and add no libraries or build tooling.

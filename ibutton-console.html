@@ -1800,11 +1800,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   // once the form is edited by hand it no longer matches the chosen saved settings
   ["cfgRate", "cfgUnit", "cfgHigh", "cfgLow", "cfgHighOn", "cfgLowOn", "cfgRes", "cfgDelay", "cfgSync", "cfgRoll"].forEach((id) => $(id).addEventListener("input", () => { if ($("cfgPreset").value) { $("cfgPreset").value = ""; $("btnPresetDel").disabled = true; disarmPresetDel(); } }));
   fillPresets("");
+  // runs a logger action; resolves to "" on success or to the reason it failed (shown to the user in Activity)
   async function guarded(name, fn) {
-    if (!state.device || state.busy) return;
+    if (!state.device) return "No logger is ready. Turn on Demo mode, or connect a reader and put an iButton in it.";
+    if (state.busy) return "Another action is still running. Wait for it to finish.";
     const hw = state.device.kind === "usb";
     if (hw) { state.busy = true; state.busyText = name + " in progress. Keep the iButton in the reader."; refreshChrome(); }
-    try { await fn(); } catch (e) { log(name + " failed: " + e.message, "e"); }
+    try { await fn(); return ""; } catch (e) { log(name + " failed: " + e.message, "e"); return e.message; }
     finally { if (hw) { state.busy = false; state.busyText = ""; refreshChrome(); } }
   }
   /* ---------- history: every explicit read is saved by device ID and read time ---------- */
@@ -1921,8 +1923,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   });
 
   async function doRead(save) {
-    if (!state.demo && state.reader && !state.file && !state.busy && !(await attachLogger())) return;
-    await guarded("Read", async () => {
+    if (!state.demo && state.reader && !state.file && !state.busy && !(await attachLogger())) return "No supported iButton logger found on the reader. Press it firmly into the reader and try again.";
+    return guarded("Read", async () => {
       if (state.device.kind === "usb") log("Reading " + state.device.model + " " + state.device.rom + "...");
       const res = await state.device.read();
       if (res.mission && res.status !== "idle") setAlarms(res.mission);
@@ -1932,7 +1934,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     });
   }
   $("btnRead").addEventListener("click", () => doRead(true));
-  $("btnStart").addEventListener("click", () => guarded("Start", async () => {
+  const doStart = () => guarded("Start", async () => {
     const cfg = readConfig();
     const sp = specNow();
     if (cfg.rateSec < sp.minRate || cfg.rateSec > sp.maxRate) throw new Error("Interval must be " + fmtRate(sp.minRate) + " to " + fmtRate(sp.maxRate) + " for " + sp.id + ".");
@@ -1944,18 +1946,22 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     log("Mission started, every " + fmtRate(cfg.rateSec) + ", " + alarmText(cfg) + ".", "o");
     const res = await state.device.read(); applyData(res);
     if (state.device.kind === "demo") log("Demo history generated: " + res.samples.length.toLocaleString() + " samples from " + (res.samples.length ? fmtTime(res.samples[0].t) : "n/a") + ".", "o");
-  }));
-  $("btnStop").addEventListener("click", () => guarded("Stop", async () => { await state.device.stop(); log("Mission stopped.", "o"); applyData(await state.device.read()); }));
+  });
+  const doStop = () => guarded("Stop", async () => { await state.device.stop(); log("Mission stopped.", "o"); applyData(await state.device.read()); });
+  const doClear = () => guarded("Clear", async () => { await state.device.clear(); log("Memory cleared.", "w"); applyData(await state.device.read()); });
+  $("btnStart").addEventListener("click", doStart);
+  $("btnStop").addEventListener("click", doStop);
   let clearArmed = null;
-  $("btnClear").addEventListener("click", () => guarded("Clear", async () => {
+  $("btnClear").addEventListener("click", () => {
+    if (!state.device || state.busy) return;
     if (!clearArmed) {
       $("clearNote").hidden = false; $("btnClear").textContent = "Confirm clear";
       clearArmed = setTimeout(() => { clearArmed = null; $("clearNote").hidden = true; $("btnClear").textContent = "Clear memory"; }, 4000);
       return;
     }
     clearTimeout(clearArmed); clearArmed = null; $("clearNote").hidden = true; $("btnClear").textContent = "Clear memory";
-    await state.device.clear(); log("Memory cleared.", "w"); applyData(await state.device.read());
-  }));
+    doClear();
+  });
 
   /* ---------- open a CSV file (this app's export, or any file with timestamp and temperature columns) ---------- */
   function parseCsv(text) {
@@ -2066,11 +2072,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     state.reader = null; state.file = null; state.csvHead = null; state.fileInfo = null; state.lastRead = null; state.readAt = null; state.sourceKind = null; state.historyInfo = null; state.device = null; state.data = null; log("Disconnected."); refreshChrome(); renderAll();
   });
 
-  $("demoToggle").addEventListener("change", async (e) => {
-    state.demo = e.target.checked; state.data = null; state.file = null; state.csvHead = null; state.fileInfo = null; state.lastRead = null; state.readAt = null; state.sourceKind = null; state.historyInfo = null;
+  $("demoToggle").addEventListener("change", (e) => setDemo(e.target.checked));
+  async function setDemo(on) {
+    $("demoToggle").checked = on;
+    state.demo = on; state.data = null; state.file = null; state.csvHead = null; state.fileInfo = null; state.lastRead = null; state.readAt = null; state.sourceKind = null; state.historyInfo = null;
     if (state.demo) { selectDemo(state.spec.id, state.scen.id, true); log("Demo mode on. Simulated reader and logger attached.", "o"); refreshChrome(); await doRead(); }
     else { state.device = null; log(state.reader ? "Demo mode off." : "Demo mode off. Connect a USB reader to continue."); refreshChrome(); pillSet("No device", "idle"); renderAll(); if (state.reader) await doRead(false); }
-  });
+  }
 
   /* ---------- feedback and bug report ---------- */
   const fbOpen = () => !$("fbOverlay").hidden;
@@ -2164,6 +2172,131 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   applyMode();
 
   if (!navigator.usb) { const h = $("browserHint"); h.classList.add("warn"); h.textContent = "This browser has no WebUSB, so a real iButton reader cannot be used. Open this page in Chrome or Edge on a computer or an Android phone. Demo mode works here."; }
+
+  /* ---------- WebMCP: tools an AI agent in the browser can call (navigator.modelContext) ---------- */
+  // Registered only when the browser (or an extension such as MCP-B) provides navigator.modelContext.
+  // Connecting a reader still needs a click on Connect reader: WebUSB only opens the device picker on a user gesture.
+  (function () {
+    const mc = navigator.modelContext;
+    if (!mc || !(mc.registerTool || mc.provideContext)) return;
+    const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
+    const ok = (v) => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] });
+    const fail = (msg) => ({ content: [{ type: "text", text: msg }], isError: true });
+    // Start, Stop and Clear change the logger, so the person at the page confirms each one
+    async function confirmed(client, msg) {
+      const ask = async () => window.confirm(msg);
+      try { return !!(client && client.requestUserInteraction ? await client.requestUserInteraction(ask) : await ask()); } catch (e) { return false; }
+    }
+    const live = () => (!state.device ? "No logger is ready. Turn on Demo mode, or press Connect reader and put an iButton in it." : state.file ? "A file or saved read is open, which is read-only. Press Disconnect first." : "");
+    function status() {
+      const d = state.device, r = state.data, m = r && r.mission, s = r ? r.samples : [], t = thr();
+      return {
+        source: state.file ? state.sourceKind : state.demo ? "demo" : d ? "usb" : state.reader ? "reader only" : "none",
+        reader: state.reader ? state.reader.productName || "DS9490R" : null, busy: !!state.busy,
+        device: d ? { id: d.rom, model: d.model, family: d.family, capacitySamples: d.capacity } : null,
+        status: r ? r.status : null, samples: s.length, firstSample: s.length ? iso(s[0].t) : null, lastSample: s.length ? iso(s[s.length - 1].t) : null,
+        readAt: iso(state.readAt), loggerClock: r ? iso(r.clock) : null, hasHumidity: hasHum(),
+        mission: m ? { intervalSec: m.rateSec, resolutionC: m.res, highAlarmC: m.highOn === false ? null : m.high, lowAlarmC: m.lowOn === false ? null : m.low, startDelayMin: Math.round((m.delaySec || 0) / 60), rollover: !!m.rollover, startAt: iso(m.startAt) } : null,
+        displayThresholdsC: { high: t.hiOn ? t.high : null, low: t.loOn ? t.low : null },
+        supported: state.device && state.device.spec ? { model: specNow().id, minIntervalSec: specNow().minRate, maxIntervalSec: specNow().maxRate, resolutionsC: specNow().resOpts.map((o) => o.res), rollover: !specNow().noRollover } : null
+      };
+    }
+    function statsOf(key) { const st = state.data && computeStats(state.data.samples, thr(), key); if (!st) return null; delete st.vals; delete st.key; st.min.t = iso(st.min.t); st.max.t = iso(st.max.t); return st; }
+    // put the requested mission into the Mission setup form, checked against what the logger supports; "" when it fits
+    function fillForm(a) {
+      const sp = specNow(), rate = Math.round(+a.intervalSec);
+      if (!(rate >= 1)) return "Give intervalSec as a whole number of seconds.";
+      const unit = sp.units.slice().reverse().find((u) => rate % u === 0);
+      if (!unit) return sp.id + " takes the interval in whole " + (sp.units[0] === 60 ? "minutes" : "seconds") + ".";
+      $("cfgUnit").value = String(unit); $("cfgRate").value = rate / unit;
+      if (a.resolutionC != null) { const o = sp.resOpts.find((x) => Math.abs(x.res - a.resolutionC) < 1e-9); if (!o) return sp.id + " supports resolution " + sp.resOpts.map((x) => x.res).join(" or ") + " °C."; $("cfgRes").value = String(o.res); }
+      const t = thr();
+      setAlarms({ high: a.highAlarmC != null ? a.highAlarmC : t.high, low: a.lowAlarmC != null ? a.lowAlarmC : t.low, highOn: a.highAlarmC != null, lowOn: a.lowAlarmC != null });
+      $("cfgDelay").value = Math.max(0, Math.round(+a.startDelayMin || 0));
+      if (a.syncClock != null) $("cfgSync").checked = !!a.syncClock;
+      $("cfgRoll").checked = !!a.rollover;
+      updateEstimate(); if (state.data) renderAll();
+      return "";
+    }
+    const tools = [
+      { name: "get_status", description: "Current data source, logger (ID, model, memory), mission settings, number of samples and what the connected model supports. Times are ISO 8601 UTC.",
+        inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true }, execute: async () => ok(status()) },
+      { name: "get_samples", description: "Samples currently shown in the console as CSV (timestamp in ISO 8601 UTC, temperature in °C, humidity in %RH when recorded). Newest samples when limited.",
+        inputSchema: { type: "object", properties: { since: { type: "string", description: "Only samples at or after this ISO 8601 time." }, limit: { type: "integer", minimum: 1, maximum: 20000, description: "Maximum rows, default 2000." } } },
+        annotations: { readOnlyHint: true },
+        execute: async (a) => {
+          if (!state.data || !state.data.samples.length) return fail("No samples loaded. Read a logger, open a saved read, or turn on Demo mode first.");
+          const from = a && a.since ? Date.parse(a.since) : -Infinity; if (isNaN(from)) return fail("since must be an ISO 8601 time, for example 2026-10-01T00:00:00Z.");
+          const all = state.data.samples.filter((p) => p.t >= from), lim = Math.min(20000, Math.max(1, Math.round((a && a.limit) || 2000))), s = all.slice(-lim), hh = hasHum();
+          const head = "# " + s.length + " of " + all.length + " samples" + (all.length > s.length ? " (newest)" : "") + (state.device ? ", device " + state.device.rom : "") + "\n";
+          return ok(head + "timestamp,temperature_c" + (hh ? ",humidity_pct" : "") + "\n" + s.map((p) => iso(p.t) + "," + p.v.toFixed(4) + (hh ? "," + (p.h != null ? p.h.toFixed(2) : "") : "")).join("\n"));
+        } },
+      { name: "get_stats", description: "Summary statistics of the loaded samples: min, max, mean, SD, median, 5th and 95th percentile, and the number of samples above or below the alarm thresholds.",
+        inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true },
+        execute: async () => (state.data && state.data.samples.length ? ok({ thresholdsC: status().displayThresholdsC, temperatureC: statsOf("v"), humidityPct: hasHum() ? statsOf("h") : null }) : fail("No samples loaded. Read a logger first.")) },
+      { name: "read_device", description: "Read the logger in the reader (or the demo logger) and save the read to history. The iButton must stay in the reader until it finishes.",
+        inputSchema: { type: "object", properties: { saveToHistory: { type: "boolean", description: "Default true." } } },
+        execute: async (a) => {
+          if (!state.demo && !state.reader) return fail("No reader connected. Ask the user to press Connect reader, or turn on demo mode.");
+          if (state.file) return fail("A file or saved read is open. Press Disconnect first.");
+          log("AI agent: read device."); const err = await doRead(!(a && a.saveToHistory === false));
+          return err ? fail(err) : ok(status());
+        } },
+      { name: "set_demo_mode", description: "Turn the simulated reader and logger on or off, optionally choosing the logger model and application scenario.",
+        inputSchema: { type: "object", properties: { on: { type: "boolean" }, model: { type: "string", enum: SPECS.map((s) => s.id) }, scenario: { type: "string", enum: SCENARIOS.map((s) => s.id), description: SCENARIOS.map((s) => s.id + ": " + s.label).join("; ") } }, required: ["on"] },
+        execute: async (a) => {
+          if (state.busy) return fail("Another action is still running.");
+          if (a.on && (a.model || a.scenario)) selectDemo(a.model || state.spec.id, a.scenario || state.scen.id, true);
+          log("AI agent: demo mode " + (a.on ? "on." : "off.")); await setDemo(!!a.on);
+          return ok(status());
+        } },
+      { name: "start_mission", description: "Start a new mission on the logger. This erases all samples in its memory first. The user is asked to confirm. Leave an alarm out to turn it off.",
+        inputSchema: { type: "object", properties: {
+          intervalSec: { type: "integer", minimum: 1, description: "Sample interval in seconds; see get_status for the allowed range." },
+          highAlarmC: { type: "number" }, lowAlarmC: { type: "number" },
+          resolutionC: { type: "number", description: "One of the resolutions from get_status. Finer resolution can hold fewer samples." },
+          startDelayMin: { type: "integer", minimum: 0 }, syncClock: { type: "boolean", description: "Set the logger clock to this computer's time." },
+          rollover: { type: "boolean", description: "Overwrite the oldest samples when memory is full (not on DS1925)." } }, required: ["intervalSec"] },
+        execute: async (a, client) => {
+          const why = live(); if (why) return fail(why);
+          const bad = fillForm(a); if (bad) return fail(bad);
+          const c = readConfig();
+          if (!(await confirmed(client, "An AI agent wants to start a mission on " + state.device.rom + ": every " + fmtRate(c.rateSec) + ", " + alarmText(c) + ". This erases the logger's memory. Start it?"))) { log("AI agent: start mission declined.", "w"); return fail("The user declined to start the mission."); }
+          log("AI agent: start mission."); const err = await doStart();
+          return err ? fail(err) : ok(status());
+        } },
+      { name: "stop_mission", description: "Stop the running mission. Samples already recorded stay in memory. The user is asked to confirm.",
+        inputSchema: { type: "object", properties: {} },
+        execute: async (a, client) => {
+          const why = live(); if (why) return fail(why);
+          if (!(await confirmed(client, "An AI agent wants to stop the mission on " + state.device.rom + ". Stop it?"))) { log("AI agent: stop mission declined.", "w"); return fail("The user declined to stop the mission."); }
+          log("AI agent: stop mission."); const err = await doStop();
+          return err ? fail(err) : ok(status());
+        } },
+      { name: "clear_memory", description: "Erase all samples and the mission from the logger. Cannot be undone; read and save the data first. The user is asked to confirm.",
+        inputSchema: { type: "object", properties: {} }, annotations: { destructiveHint: true },
+        execute: async (a, client) => {
+          const why = live(); if (why) return fail(why);
+          if (!(await confirmed(client, "An AI agent wants to erase all samples on " + state.device.rom + ". This cannot be undone. Erase?"))) { log("AI agent: clear memory declined.", "w"); return fail("The user declined to clear the memory."); }
+          log("AI agent: clear memory."); const err = await doClear();
+          return err ? fail(err) : ok(status());
+        } },
+      { name: "list_history", description: "Reads saved in this browser's history, newest first.",
+        inputSchema: { type: "object", properties: { deviceId: { type: "string", description: "Only reads of this device ID." } } }, annotations: { readOnlyHint: true },
+        execute: async (a) => { await renderHistory(); return ok(histCache.filter((r) => !(a && a.deviceId) || r.deviceId === a.deviceId).map((r) => ({ key: r.key, deviceId: r.deviceId, model: r.model, readAt: iso(r.readAt), samples: r.t.length, demo: !!r.demo }))); } },
+      { name: "open_history", description: "Show a saved read in the console (read-only), so get_samples and get_stats return its data.",
+        inputSchema: { type: "object", properties: { key: { type: "string", description: "key from list_history" } }, required: ["key"] },
+        execute: async (a) => {
+          if (state.busy) return fail("Another action is still running.");
+          await renderHistory(); const r = histCache.find((x) => x.key === a.key); if (!r) return fail("No saved read with that key. Call list_history for the keys.");
+          openHistory(r); return ok(status());
+        } }
+    ];
+    try {
+      if (mc.registerTool) tools.forEach((t) => mc.registerTool(t)); else mc.provideContext({ tools });
+      log("AI agent tools available in this browser (WebMCP): " + tools.length + " tools.");
+    } catch (e) { log("Could not offer AI agent tools: " + e.message, "w"); }
+  })();
 
   /* ---------- boot ---------- */
   $("demoModel").innerHTML = SPECS.map((s) => '<option value="' + s.id + '">' + s.name + "</option>").join("");

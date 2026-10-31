@@ -55,6 +55,7 @@ Family 41h loggers with password protection turned on are not supported.
 - **CSV export** with templated file names such as `{model}_{id}_{datetime}`. You can save, copy or drag out the file.
 - **Open CSV files** in read-only mode. This works with files exported by this app and with any CSV that has timestamp and temperature columns.
 - **History:** every read is saved in the browser by device ID and read time, and you can export all saved reads at once.
+- **AI agent tools (WebMCP):** in a browser that supports [WebMCP](https://github.com/webmachinelearning/webmcp) (`navigator.modelContext`), the page offers tools an AI agent can call: `get_status`, `get_samples`, `get_stats`, `read_device`, `set_demo_mode`, `start_mission`, `stop_mission`, `clear_memory`, `list_history` and `open_history`. Start, stop and clear ask you to confirm first, and every agent action is listed under Activity. You still connect the reader yourself, because WebUSB only opens the device picker after a click.
 - Light and dark mode, plus a feedback form that writes a bug report for you to copy or email. Nothing is sent automatically.
 
 ## Data storage
