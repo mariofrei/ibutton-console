@@ -2173,19 +2173,21 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
   if (!navigator.usb) { const h = $("browserHint"); h.classList.add("warn"); h.textContent = "This browser has no WebUSB, so a real iButton reader cannot be used. Open this page in Chrome or Edge on a computer or an Android phone. Demo mode works here."; }
 
-  /* ---------- WebMCP: tools an AI agent in the browser can call (navigator.modelContext) ---------- */
-  // Registered only when the browser (or an extension such as MCP-B) provides navigator.modelContext.
+  /* ---------- WebMCP: tools an AI agent in the browser can call (document.modelContext) ---------- */
+  // Registered only when the browser provides WebMCP: Chrome 146+ with chrome://flags/#enable-webmcp-testing, or its origin trial.
+  // Older drafts and polyfills (MCP-B) put it on navigator.modelContext. A tool returns a string. A failure is returned as
+  // "Error: ..." text, not thrown, because Chrome replaces a thrown error's message with a generic one the agent cannot act on.
   // Connecting a reader still needs a click on Connect reader: WebUSB only opens the device picker on a user gesture.
   (function () {
-    const mc = navigator.modelContext;
+    const mc = document.modelContext || navigator.modelContext;
     if (!mc || !(mc.registerTool || mc.provideContext)) return;
     const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
-    const ok = (v) => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] });
-    const fail = (msg) => ({ content: [{ type: "text", text: msg }], isError: true });
-    // Start, Stop and Clear change the logger, so the person at the page confirms each one
-    async function confirmed(client, msg) {
+    const ok = (v) => (typeof v === "string" ? v : JSON.stringify(v, null, 2));
+    const fail = (msg) => "Error: " + msg;
+    // Start, Stop and Clear change the logger, so the person at the page confirms each one (in the page, whatever the agent does)
+    async function confirmed(ctx, msg) {
       const ask = async () => window.confirm(msg);
-      try { return !!(client && client.requestUserInteraction ? await client.requestUserInteraction(ask) : await ask()); } catch (e) { return false; }
+      try { return !!(ctx && ctx.requestUserInteraction ? await ctx.requestUserInteraction(ask) : await ask()); } catch (e) { return false; }
     }
     const live = () => (!state.device ? "No logger is ready. Turn on Demo mode, or press Connect reader and put an iButton in it." : state.file ? "A file or saved read is open, which is read-only. Press Disconnect first." : "");
     function status() {
@@ -2257,6 +2259,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
           resolutionC: { type: "number", description: "One of the resolutions from get_status. Finer resolution can hold fewer samples." },
           startDelayMin: { type: "integer", minimum: 0 }, syncClock: { type: "boolean", description: "Set the logger clock to this computer's time." },
           rollover: { type: "boolean", description: "Overwrite the oldest samples when memory is full (not on DS1925)." } }, required: ["intervalSec"] },
+        annotations: { consequentialHint: true },
         execute: async (a, client) => {
           const why = live(); if (why) return fail(why);
           const bad = fillForm(a); if (bad) return fail(bad);
@@ -2266,7 +2269,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
           return err ? fail(err) : ok(status());
         } },
       { name: "stop_mission", description: "Stop the running mission. Samples already recorded stay in memory. The user is asked to confirm.",
-        inputSchema: { type: "object", properties: {} },
+        inputSchema: { type: "object", properties: {} }, annotations: { consequentialHint: true },
         execute: async (a, client) => {
           const why = live(); if (why) return fail(why);
           if (!(await confirmed(client, "An AI agent wants to stop the mission on " + state.device.rom + ". Stop it?"))) { log("AI agent: stop mission declined.", "w"); return fail("The user declined to stop the mission."); }
@@ -2274,7 +2277,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
           return err ? fail(err) : ok(status());
         } },
       { name: "clear_memory", description: "Erase all samples and the mission from the logger. Cannot be undone; read and save the data first. The user is asked to confirm.",
-        inputSchema: { type: "object", properties: {} }, annotations: { destructiveHint: true },
+        inputSchema: { type: "object", properties: {} }, annotations: { consequentialHint: true },
         execute: async (a, client) => {
           const why = live(); if (why) return fail(why);
           if (!(await confirmed(client, "An AI agent wants to erase all samples on " + state.device.rom + ". This cannot be undone. Erase?"))) { log("AI agent: clear memory declined.", "w"); return fail("The user declined to clear the memory."); }
@@ -2292,10 +2295,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
           openHistory(r); return ok(status());
         } }
     ];
-    try {
-      if (mc.registerTool) tools.forEach((t) => mc.registerTool(t)); else mc.provideContext({ tools });
-      log("AI agent tools available in this browser (WebMCP): " + tools.length + " tools.");
-    } catch (e) { log("Could not offer AI agent tools: " + e.message, "w"); }
+    (async () => {
+      const bad = [];
+      if (mc.registerTool) { for (const t of tools) { try { await mc.registerTool(t); } catch (e) { bad.push(t.name + " (" + e.message + ")"); } } }
+      else { try { await mc.provideContext({ tools }); } catch (e) { bad.push(e.message); } }
+      if (bad.length < tools.length) log("AI agent tools available in this browser (WebMCP): " + (tools.length - bad.length) + " tools.");
+      if (bad.length) log("Some AI agent tools could not be offered: " + bad.join(", ") + ".", "w");
+    })();
   })();
 
   /* ---------- boot ---------- */
